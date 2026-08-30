@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Tournament dataVersion="201">
+  <Players>
+    <Player firstName="JOHN" name="SMITH" rank="5D" grade="5D" club="ABCD" country="GB" egfPin="11111111"/>
+    <Player firstName="Carol" name="King" rank="4D" grade="4D" club="QRST" country="DE" egfPin="55555555"/>
+  </Players>
+  <Games>
+    <Game roundNumber="1" whitePlayer="SMITHJOHN" blackPlayer="KINGCAROL" handicap="0" knownColor="true" result="RESULT_BLACKWINS" tableNumber="1"/>
+    <Game roundNumber="2" whitePlayer="KINGCAROL" blackPlayer="SMITHJOHN" handicap="0" knownColor="true" result="RESULT_BLACKWINS" tableNumber="1"/>
+  </Games>
+  <TournamentParameterSet>
+    <GeneralParameterSet name="Autumn Open 2024" shortName="AO24" beginDate="2024-10-11" endDate="2024-10-12" numberOfRounds="2"/>
+  </TournamentParameterSet>
+</Tournament>
