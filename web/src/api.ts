@@ -30,6 +30,19 @@ export interface PlayerEventRef {
   eventName: string;
   date: string | null;
   gameCount: number;
+  wins: number;
+}
+
+export interface DuplicateHint {
+  reason: 'egf' | 'name';
+  playerIds: number[];
+}
+
+export interface MergeResult {
+  keepId: number;
+  keepName: string;
+  mergedCount: number;
+  movedEventPlayers: number;
 }
 
 export interface PlayerDetail {
@@ -111,6 +124,14 @@ export const api = {
     return req<ImportSummary>('/api/imports', { method: 'POST', body: fd });
   },
   players: () => req<PlayerListItem[]>('/api/players'),
+  playerDuplicateHints: () =>
+    req<DuplicateHint[]>('/api/players/duplicate-hints'),
+  mergePlayers: (keepId: number, mergeIds: number[]) =>
+    req<MergeResult>('/api/players/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keepId, mergeIds }),
+    }),
   player: (id: number | string) => req<PlayerDetail>(`/api/players/${id}`),
   playerHistory: (id: number | string, page: number) =>
     req<HistoryPage>(`/api/players/${id}/history?page=${page}`),

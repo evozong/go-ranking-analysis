@@ -31,6 +31,7 @@ export function PlayerPage() {
               <th>Date</th>
               <th>Event</th>
               <th>Games</th>
+              <th>Won</th>
             </tr>
           </thead>
           <tbody>
@@ -41,19 +42,20 @@ export function PlayerPage() {
                   <Link to={`/events/${e.eventId}`}>{e.eventName}</Link>
                 </td>
                 <td>{e.gameCount}</td>
+                <td>{e.wins}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      <h2>Losing records</h2>
+      <h2>上家</h2>
       <RecordTable records={d.losing} />
 
-      <h2>Even records</h2>
+      <h2>平手</h2>
       <RecordTable records={d.even} />
 
-      <h2>Winning records</h2>
+      <h2>下家</h2>
       <RecordTable records={d.winning} />
 
       <h2>Game history</h2>

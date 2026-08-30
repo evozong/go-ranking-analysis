@@ -35,6 +35,9 @@ git-ignored. Delete it to start fresh.
    history plus opponents split into losing / even / winning records.
 4. On an event page you can **remap** a mis-matched player to the correct canonical
    player (or a fresh one) without re-importing.
+5. On the **Players** page, likely duplicate canonical players are flagged (same EGF
+   pin / similar name); tick two or more rows, pick the keeper, and **merge** to
+   repoint their game history onto one player.
 
 ## Layout notes
 

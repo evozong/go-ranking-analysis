@@ -7,6 +7,7 @@ import {
 } from './importTournament.js';
 import { NotOpenGothaError } from './openGotha.js';
 import {
+  findDuplicateHints,
   getEvent,
   getEventPlayers,
   getMatchups,
@@ -14,6 +15,8 @@ import {
   getPlayerHistory,
   listEvents,
   listPlayers,
+  mergePlayers,
+  MergeError,
   remapEventPlayer,
   RemapError,
 } from './analysis.js';
@@ -67,6 +70,28 @@ export function createRouter(db: Database): Router {
 
   r.get('/players', (_req, res) => {
     res.json(listPlayers(db));
+  });
+
+  r.get('/players/duplicate-hints', (_req, res) => {
+    res.json(findDuplicateHints(db));
+  });
+
+  r.post('/players/merge', (req, res) => {
+    const keepId = typeof req.body?.keepId === 'number' ? req.body.keepId : undefined;
+    const mergeIds = Array.isArray(req.body?.mergeIds)
+      ? (req.body.mergeIds as unknown[]).filter((x): x is number => typeof x === 'number')
+      : undefined;
+    if (keepId === undefined || mergeIds === undefined) {
+      return res.status(400).json({ error: 'keepId and mergeIds are required' });
+    }
+    try {
+      return res.json(mergePlayers(db, keepId, mergeIds));
+    } catch (err) {
+      if (err instanceof MergeError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
   });
 
   r.get('/players/:id', (req, res) => {
