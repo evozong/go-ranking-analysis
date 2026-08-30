@@ -1,0 +1,155 @@
+:root {
+  --border: #d6d6d6;
+  --muted: #666;
+  --bg-alt: #f6f6f6;
+  --link: #1a5fb4;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c1c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.topnav {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.topnav .brand {
+  font-weight: 700;
+}
+
+.topnav nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.topnav nav a.active {
+  font-weight: 700;
+}
+
+.content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 1.75rem 0 0.5rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.92rem;
+}
+
+th,
+td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+}
+
+th {
+  background: var(--bg-alt);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: #b00020;
+  background: #fdecef;
+  border: 1px solid #f3b5c0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+}
+
+.ok {
+  background: #eaf6ea;
+  border: 1px solid #b7dcb7;
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+}
+
+input[type='text'],
+select {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font: inherit;
+}
+
+button {
+  font: inherit;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pager {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.filter-row {
+  margin: 0.5rem 0 1rem;
+}
+
+.outcome-win {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.outcome-loss {
+  color: #b00020;
+  font-weight: 600;
+}
+
+.outcome-draw,
+.outcome-nongame {
+  color: var(--muted);
+}
+
+.remap {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-left: 0.5rem;
+}

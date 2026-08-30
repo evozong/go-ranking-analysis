@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Tournament dataVersion="201">
+  <Players>
+    <Player firstName="John" name="Smith" rank="5D" grade="5D" club="ABCD" country="GB" egfPin="11111111"/>
+    <Player firstName="Jane" name="Doe" rank="3D" grade="3D" club="EFGH" country="GB" egfPin="22222222"/>
+    <Player firstName="Bob" name="Jones" rank="1K" grade="1K" club="IJKL" country="IE" egfPin="33333333"/>
+    <Player firstName="Amy" name="Adams" rank="2D" grade="2D" club="MNOP" country="FR" egfPin="44444444"/>
+  </Players>
+  <Games>
+    <Game roundNumber="1" whitePlayer="SMITHJOHN" blackPlayer="DOEJANE" handicap="0" knownColor="true" result="RESULT_WHITEWINS" tableNumber="1"/>
+    <Game roundNumber="1" whitePlayer="JONESBOB" blackPlayer="ADAMSAMY" handicap="2" knownColor="true" result="RESULT_BLACKWINS" tableNumber="2"/>
+    <Game roundNumber="2" whitePlayer="DOEJANE" blackPlayer="JONESBOB" handicap="0" knownColor="true" result="RESULT_EQUAL" tableNumber="1"/>
+    <Game roundNumber="2" whitePlayer="SMITHJOHN" blackPlayer="ADAMSAMY" handicap="0" knownColor="true" result="RESULT_WHITEWINS_BYDEF" tableNumber="2"/>
+    <Game roundNumber="3" whitePlayer="SMITHJOHN" blackPlayer="JONESBOB" handicap="0" knownColor="true" result="RESULT_BLACKWINS" tableNumber="1"/>
+  </Games>
+  <ByePlayer roundNumber="3" player="ADAMSAMY"/>
+  <TournamentParameterSet>
+    <GeneralParameterSet name="Spring Open 2024" shortName="SO24" beginDate="2024-03-15" endDate="2024-03-17" numberOfRounds="3"/>
+  </TournamentParameterSet>
+</Tournament>
