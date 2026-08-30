@@ -7,102 +7,113 @@ import {
   MergeError,
 } from './analysis.js';
 import { resolveCanonicalPlayer } from './players.js';
+import type { Queryable } from './db.js';
 import { makeTestDb } from './testdb.js';
 
-function addEp(
-  db: any,
+async function addEp(
+  db: Queryable,
   eventId: number,
   playerId: number,
   key: string,
   extra: { egf_pin?: string } = {},
-): number {
-  return Number(
-    db
-      .prepare(
+): Promise<number> {
+  return (
+    (
+      await db.query(
         `INSERT INTO event_players (event_id, player_id, og_key, display_name, egf_pin)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [eventId, playerId, key, key, extra.egf_pin ?? null],
       )
-      .run(eventId, playerId, key, key, extra.egf_pin ?? null).lastInsertRowid,
-  );
+    ).rows[0] as { id: number }
+  ).id;
 }
 
-function addGame(
-  db: any,
+async function addGame(
+  db: Queryable,
   eventId: number,
   white: number,
   black: number,
   winner: number | null,
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.query(
     `INSERT INTO games
        (event_id, round_number, white_event_player_id, black_event_player_id,
         winner_event_player_id, is_game, result_type)
-     VALUES (?, 1, ?, ?, ?, 1, 'game')`,
-  ).run(eventId, white, black, winner);
+     VALUES ($1, 1, $2, $3, $4, 1, 'game')`,
+    [eventId, white, black, winner],
+  );
 }
 
-test('mergePlayers repoints event_players onto the keeper and deletes merged rows', () => {
-  const db = makeTestDb();
-  const a = resolveCanonicalPlayer(db, 'Ann Lee').playerId;
-  const b = resolveCanonicalPlayer(db, 'Anna Lee').playerId;
-  const keep = resolveCanonicalPlayer(db, 'Bob Fox').playerId;
+test('mergePlayers repoints event_players onto the keeper and deletes merged rows', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
 
-  addEp(db, 1, a, 'a1');
-  addEp(db, 2, a, 'a2');
-  addEp(db, 1, b, 'b1');
-  addEp(db, 2, b, 'b2');
-  addEp(db, 1, keep, 'k1');
+  const a = (await resolveCanonicalPlayer(db, 'Ann Lee')).playerId;
+  const b = (await resolveCanonicalPlayer(db, 'Anna Lee')).playerId;
+  const keep = (await resolveCanonicalPlayer(db, 'Bob Fox')).playerId;
 
-  const res = mergePlayers(db, keep, [a, b]);
+  await addEp(db, 1, a, 'a1');
+  await addEp(db, 2, a, 'a2');
+  await addEp(db, 1, b, 'b1');
+  await addEp(db, 2, b, 'b2');
+  await addEp(db, 1, keep, 'k1');
+
+  const res = await mergePlayers(db, keep, [a, b]);
   assert.equal(res.keepId, keep);
   assert.equal(res.keepName, 'Bob Fox');
   assert.equal(res.mergedCount, 2);
   assert.equal(res.movedEventPlayers, 4);
 
-  const gone = db
-    .prepare('SELECT COUNT(*) AS n FROM players WHERE id IN (?, ?)')
-    .get(a, b) as { n: number };
+  const gone = (
+    await db.query('SELECT COUNT(*)::int AS n FROM players WHERE id IN ($1, $2)', [a, b])
+  ).rows[0] as { n: number };
   assert.equal(gone.n, 0);
 
-  const onKeeper = db
-    .prepare('SELECT COUNT(*) AS n FROM event_players WHERE player_id = ?')
-    .get(keep) as { n: number };
+  const onKeeper = (
+    await db.query('SELECT COUNT(*)::int AS n FROM event_players WHERE player_id = $1', [
+      keep,
+    ])
+  ).rows[0] as { n: number };
   assert.equal(onKeeper.n, 5);
 });
 
-test('mergePlayers rejects keepId inside mergeIds and unknown ids', () => {
-  const db = makeTestDb();
-  const a = resolveCanonicalPlayer(db, 'Ann Lee').playerId;
-  const b = resolveCanonicalPlayer(db, 'Bob Fox').playerId;
+test('mergePlayers rejects keepId inside mergeIds and unknown ids', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
 
-  assert.throws(() => mergePlayers(db, a, [a, b]), MergeError);
-  assert.throws(() => mergePlayers(db, a, [999999]), MergeError);
-  assert.throws(() => mergePlayers(db, 999999, [a]), MergeError);
-  assert.throws(() => mergePlayers(db, a, []), MergeError);
+  const a = (await resolveCanonicalPlayer(db, 'Ann Lee')).playerId;
+  const b = (await resolveCanonicalPlayer(db, 'Bob Fox')).playerId;
+
+  await assert.rejects(() => mergePlayers(db, a, [a, b]), MergeError);
+  await assert.rejects(() => mergePlayers(db, a, [999999]), MergeError);
+  await assert.rejects(() => mergePlayers(db, 999999, [a]), MergeError);
+  await assert.rejects(() => mergePlayers(db, a, []), MergeError);
 });
 
-test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occurring pairs', () => {
-  const db = makeTestDb();
-  const john = resolveCanonicalPlayer(db, 'John Smith').playerId;
-  const jon = resolveCanonicalPlayer(db, 'Jon Smith').playerId;
-  const zed = resolveCanonicalPlayer(db, 'Zed Alpha').playerId;
-  const yan = resolveCanonicalPlayer(db, 'Yan Beta').playerId;
-  const kate = resolveCanonicalPlayer(db, 'Kate Ray').playerId;
-  const kata = resolveCanonicalPlayer(db, 'Kata Ray').playerId;
+test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occurring pairs', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
+
+  const john = (await resolveCanonicalPlayer(db, 'John Smith')).playerId;
+  const jon = (await resolveCanonicalPlayer(db, 'Jon Smith')).playerId;
+  const zed = (await resolveCanonicalPlayer(db, 'Zed Alpha')).playerId;
+  const yan = (await resolveCanonicalPlayer(db, 'Yan Beta')).playerId;
+  const kate = (await resolveCanonicalPlayer(db, 'Kate Ray')).playerId;
+  const kata = (await resolveCanonicalPlayer(db, 'Kata Ray')).playerId;
 
   // John / Jon: similar name, disjoint events -> name hint.
-  addEp(db, 1, john, 'john1');
-  addEp(db, 2, jon, 'jon2');
+  await addEp(db, 1, john, 'john1');
+  await addEp(db, 2, jon, 'jon2');
 
   // Zed / Yan: share an EGF pin across two events -> egf hint.
-  addEp(db, 1, zed, 'zed1', { egf_pin: '12345' });
-  addEp(db, 2, yan, 'yan2', { egf_pin: '12345' });
+  await addEp(db, 1, zed, 'zed1', { egf_pin: '12345' });
+  await addEp(db, 2, yan, 'yan2', { egf_pin: '12345' });
 
   // Kate / Kata: similar name but both play in event 1 -> suppressed.
-  addEp(db, 1, kate, 'kate1');
-  addEp(db, 1, kata, 'kata1');
+  await addEp(db, 1, kate, 'kate1');
+  await addEp(db, 1, kata, 'kata1');
 
-  const hints = findDuplicateHints(db);
+  const hints = await findDuplicateHints(db);
 
   const nameHint = hints.find(
     (h) => h.reason === 'name' && h.playerIds.includes(john) && h.playerIds.includes(jon),
@@ -111,7 +122,10 @@ test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occu
 
   const egfHint = hints.find((h) => h.reason === 'egf');
   assert.ok(egfHint, 'expected an egf hint');
-  assert.deepEqual([...egfHint!.playerIds].sort((x, y) => x - y), [zed, yan].sort((x, y) => x - y));
+  assert.deepEqual(
+    [...egfHint!.playerIds].sort((x, y) => x - y),
+    [zed, yan].sort((x, y) => x - y),
+  );
 
   const suppressed = hints.some(
     (h) => h.playerIds.includes(kate) && h.playerIds.includes(kata),
@@ -119,25 +133,27 @@ test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occu
   assert.equal(suppressed, false, 'co-occurring pair must not produce a hint');
 });
 
-test('getPlayerDetail reports per-event wins and orders opponent records by wins', () => {
-  const db = makeTestDb();
-  const k = resolveCanonicalPlayer(db, 'Keeper One').playerId;
-  const zoe = resolveCanonicalPlayer(db, 'Zoe Q').playerId;
-  const amy = resolveCanonicalPlayer(db, 'Amy Q').playerId;
+test('getPlayerDetail reports per-event wins and orders opponent records by wins', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
 
-  const kEp = addEp(db, 1, k, 'k');
-  const zoeEp = addEp(db, 1, zoe, 'zoe');
-  const amyEp = addEp(db, 1, amy, 'amy');
+  const k = (await resolveCanonicalPlayer(db, 'Keeper One')).playerId;
+  const zoe = (await resolveCanonicalPlayer(db, 'Zoe Q')).playerId;
+  const amy = (await resolveCanonicalPlayer(db, 'Amy Q')).playerId;
+
+  const kEp = await addEp(db, 1, k, 'k');
+  const zoeEp = await addEp(db, 1, zoe, 'zoe');
+  const amyEp = await addEp(db, 1, amy, 'amy');
 
   // K beats Zoe 3-0, beats Amy 2-1. Both land in the winning section.
-  addGame(db, 1, kEp, zoeEp, kEp);
-  addGame(db, 1, kEp, zoeEp, kEp);
-  addGame(db, 1, kEp, zoeEp, kEp);
-  addGame(db, 1, kEp, amyEp, kEp);
-  addGame(db, 1, kEp, amyEp, kEp);
-  addGame(db, 1, kEp, amyEp, amyEp);
+  await addGame(db, 1, kEp, zoeEp, kEp);
+  await addGame(db, 1, kEp, zoeEp, kEp);
+  await addGame(db, 1, kEp, zoeEp, kEp);
+  await addGame(db, 1, kEp, amyEp, kEp);
+  await addGame(db, 1, kEp, amyEp, kEp);
+  await addGame(db, 1, kEp, amyEp, amyEp);
 
-  const detail = getPlayerDetail(db, k)!;
+  const detail = (await getPlayerDetail(db, k))!;
 
   assert.equal(detail.events.length, 1);
   assert.equal(detail.events[0].gameCount, 6);

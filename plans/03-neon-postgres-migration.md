@@ -6,20 +6,29 @@
 `server/data.db`). We want the app to run against **Neon Postgres** instead, with two
 Neon environments:
 
-- `stg` — used by all development environments before promoting to prod.
+- `dev` — a developer's local branch, used by `npm run dev` and `npm test`.
+- `stg` — shared staging, before promoting to prod.
 - `prd` — production (not created yet; plan supports it but leaves it unconfigured).
 
-Tests get their own **dedicated Neon branch** (`PGHOST_TEST`).
+**`APP_ENV` is the single switch.** Its allowed values are exactly `dev`, `stg`, `prd`
+(case-insensitive); `db.ts` throws if it is unset or anything else. `npm test` does
+**not** inject or override `APP_ENV` — it runs against whatever database `.env.local`
+selects. A dev keeps `APP_ENV=dev` in `.env.local` so both `npm run dev` and
+`npm test` hit the `dev` branch; test-run churn is further contained by a unique
+per-test Postgres schema (`test_<hex>`, created and dropped around each test file), so
+pointing `APP_ENV` at `stg` instead is still safe if a dev wants that.
 
 The connection is configured as **discrete `pg` fields**, not a single URL, so that the
 only secret is the password. Non-secret parts (user, database, per-branch host) live in
 a committed `server/.env.defaults`; passwords **and `APP_ENV` itself** live in a
-git-ignored `server/.env.local` (keeping `APP_ENV=stg` out of the repo means a prod
+git-ignored `server/.env.local` (keeping `APP_ENV` out of the repo means a prod
 deploy can't accidentally inherit it — prod sets `APP_ENV=prd` in its own secret store,
 and `db.ts` throws if `APP_ENV` is unset rather than defaulting).
-Env var names are **postfixed by environment**: `PGHOST_STG`, `PGHOST_POOLED_STG`,
-`PGPASSWORD_STG`, `PGHOST_TEST`, `PGPASSWORD_TEST`, `PGHOST_PRD`, … with shared
-`PGUSER` / `PGDATABASE`.
+Env var names are **postfixed by environment**: `PGHOST_DEV`, `PGHOST_POOLED_DEV`,
+`PGPASSWORD_DEV`, `PGHOST_STG`, `PGHOST_POOLED_STG`, `PGPASSWORD_STG`, `PGHOST_PRD`,
+… with shared `PGUSER` / `PGDATABASE`. The test harness always uses the **direct**
+(non-pooled) `PGHOST_<ENV>` regardless of environment, because it relies on
+per-connection `SET search_path`, which PgBouncer transaction pooling drops.
 
 `better-sqlite3` is synchronous; `pg` is async. This migration therefore also converts
 the entire server data layer to `async/await`. The `web/` workspace talks only to
@@ -35,11 +44,12 @@ later if a dev wants their local data.)
    `PGHOST_STG` (direct, `ep-patient-sound-a64ff7u3.us-west-2.aws.neon.tech`) and
    `PGHOST_POOLED_STG` (same with `-pooler` before the first dot). Plus `PGUSER`
    (`neondb_owner`) and `PGDATABASE` (`neondb`).
-2. **`test` branch host** — create a separate Neon `test` branch in the console; put its
-   **direct** host in `PGHOST_TEST`. Direct, not pooled (the test harness relies on
-   per-connection `SET search_path`, which PgBouncer transaction pooling drops).
-3. **`server/.env.local`** (git-ignored): `APP_ENV=stg`, `PGPASSWORD_STG`,
-   `PGPASSWORD_TEST`.
+2. **`dev` branch host** — create a Neon `dev` branch in the console; put its
+   `PGHOST_DEV` (direct) and `PGHOST_POOLED_DEV` in `.env.defaults`. The harness uses
+   the direct one; the pooled one is only for `npm run dev` with `APP_ENV=dev`.
+3. **`server/.env.local`** (git-ignored): `APP_ENV` (`dev` recommended so both
+   `npm run dev` and `npm test` use the `dev` branch; `stg` also works),
+   `PGPASSWORD_DEV`, `PGPASSWORD_STG`.
 4. `PGHOST_PRD` / `PGHOST_POOLED_PRD` / `PGPASSWORD_PRD` — not now; set in the prod
    deploy's secret store later.
 
@@ -54,38 +64,48 @@ public. Rotate the `stg` role password in the Neon console before putting it in
 
 - Remove: `better-sqlite3`, `@types/better-sqlite3`.
 - Add: `pg`, `@types/pg`.
-- Scripts (repeat `--env-file`; later file wins, and inline env vars still take
-  precedence over both, so `APP_ENV=test` overrides the `APP_ENV=stg` in `.env.local`):
+- Scripts (repeat `--env-file`; later file wins). No script injects `APP_ENV` — the
+  database target is whatever `.env.local` sets:
   - `dev`: `tsx watch --env-file=.env.defaults --env-file-if-exists=.env.local src/server.ts`
-  - `test`: `APP_ENV=test tsx --env-file=.env.defaults --env-file-if-exists=.env.local --test src/**/*.test.ts`
+  - `test`: `tsx --env-file=.env.defaults --env-file-if-exists=.env.local --test src/**/*.test.ts`
   - `start`: unchanged (`node dist/server.js`), env supplied by the deploy.
 - Node 26 already supports `--env-file` / `--env-file-if-exists`; no `dotenv` needed.
 
 ### 2. Connection + env switch (`server/src/db.ts` — rewrite)
 
-- `const E = process.env.APP_ENV?.toUpperCase()` — **throw** if unset (no default, so a
-  misconfigured prod deploy fails loudly instead of silently using `stg`). `E` picks the
-  `_STG` / `_PRD` / `_TEST` postfix. Build the pool from discrete fields:
+- `const E = process.env.APP_ENV?.toUpperCase()` — **throw** unless `E` is one of
+  `DEV` / `STG` / `PRD` (no default, so a misconfigured prod deploy fails loudly
+  instead of silently using `stg`). A comment lists the three allowed values. `E` picks
+  the `_DEV` / `_STG` / `_PRD` postfix.
+- Export a shared resolver so the runtime pool and the test harness build their configs
+  the same way:
   ```ts
-  export const pool = new pg.Pool({
-    host: process.env[`PGHOST_POOLED_${E}`] ?? process.env[`PGHOST_${E}`],
-    user: process.env.PGUSER,
-    password: process.env[`PGPASSWORD_${E}`],
-    database: process.env.PGDATABASE,
-    ssl: { rejectUnauthorized: true },   // Neon: TLS + SCRAM channel binding handled by pg
-    max: 10,
-  });
+  export function connConfig({ direct = false } = {}): pg.PoolConfig {
+    const host = direct
+      ? process.env[`PGHOST_${E}`]
+      : process.env[`PGHOST_POOLED_${E}`] ?? process.env[`PGHOST_${E}`];
+    const password = process.env[`PGPASSWORD_${E}`];
+    // throw a clear error if host or password is missing
+    return {
+      host, user: process.env.PGUSER, password, database: process.env.PGDATABASE,
+      ssl: { rejectUnauthorized: true },   // Neon: TLS + SCRAM channel binding handled by pg
+      max: 10,
+    };
+  }
+  export const pool = new pg.Pool(connConfig());
   ```
-  Throw a clear error if `host` or `password` is missing. (Plain multi-statement DDL in
-  `initSchema` runs fine over the pooled endpoint; only the test harness needs the
-  direct host, which it reads from `PGHOST_TEST` itself.)
-- Export a `Queryable` type — `{ query(text, params?): Promise<{ rows: any[]; rowCount: number }> }`
-  — satisfied by both `pg.Pool` and `pg.PoolClient`. Every data-layer function takes
-  `db: Queryable` (replaces `Database`).
+  (Plain multi-statement DDL in `initSchema` runs fine over the pooled endpoint; the
+  test harness passes `{ direct: true }` because it needs per-connection `SET
+  search_path`.)
+- Export a `Queryable` type — `{ query(text, params?): Promise<{ rows: any[]; rowCount: number | null }> }`
+  — satisfied by both `pg.Pool` and `pg.PoolClient`; read-only data-layer functions take
+  `db: Queryable`. Export `type Db = pg.Pool` for the functions that open a transaction.
 - Export `initSchema(db: Queryable = pool)` — runs `schema.sql` (still idempotent).
-- Export `withTransaction<T>(fn: (client: Queryable) => Promise<T>): Promise<T>` —
-  checks out a client, `BEGIN` / `COMMIT` / `ROLLBACK` on throw / `release()` in
-  `finally`. Replaces `db.transaction(...)`.
+- Export `withTransaction<T>(db: Db, fn: (client: Queryable) => Promise<T>): Promise<T>`
+  — checks out a client **from `db`** (so tests transact on their own isolated-schema
+  pool, not the runtime pool), `BEGIN` / `COMMIT` / `ROLLBACK` on throw / `release()` in
+  `finally`. Replaces `db.transaction(...)`. `importTournament` / `mergePlayers` /
+  `remapEventPlayer` take `db: Db` and pass it through; `createRouter` takes `db: Db`.
 
 ### 3. Schema dialect (`server/src/schema.sql`)
 
@@ -128,14 +148,14 @@ Mechanical dialect edits across those queries:
   `importTournament` → `await withTransaction(async (client) => { ... })`; pass `client`
   down into `resolveCanonicalPlayer(client, ...)` (works via `Queryable`).
 - `importTournament`: the pre-transaction dup check + `parseOpenGotha` stay outside the
-  transaction (use `pool`); the prepared `insertEventPlayer` / `insertGame` loops become
-  plain `await client.query(text, values)` calls.
+  transaction (query on the passed-in `db`); the prepared `insertEventPlayer` /
+  `insertGame` loops become plain `await client.query(text, values)` calls.
 - `intParam` and numeric coercions in `routes.ts` are unaffected (casts above already
   return numbers).
 
 ### 5. Routes + server bootstrap
 
-- `server/src/routes.ts`: `createRouter(db: Queryable)`; every handler becomes `async`.
+- `server/src/routes.ts`: `createRouter(db: Db)`; every handler becomes `async`.
   Wrap handlers in a small `asyncHandler(fn)` (`(req,res,next) => fn(req,res,next).catch(next)`)
   since Express 4 does not catch async rejections. Known typed errors
   (`DuplicateImportError`, `NotOpenGothaError`, `MergeError`, `RemapError`) keep their
@@ -146,14 +166,16 @@ Mechanical dialect edits across those queries:
 ### 6. Test harness (`server/src/testdb.ts` — rewrite) + all `*.test.ts`
 
 - `makeTestDb()` → `async makeTestDb()` returning `{ db: pg.Pool, cleanup: () => Promise<void> }`:
-  - Build its own `pg.Pool` config from `PGHOST_TEST` (direct host) + `PGUSER` /
-    `PGPASSWORD_TEST` / `PGDATABASE` — not the `db.ts` runtime pool.
+  - Build its own `pg.Pool` config via `connConfig({ direct: true })` from `db.ts` — the
+    same `APP_ENV`-selected fields as the runtime, forced to the direct host. Not the
+    `db.ts` runtime `pool` object.
   - Generate a unique schema name `test_<16 hex>`.
-  - Admin pool (same `PGHOST_TEST` config): `CREATE SCHEMA "<name>"`.
+  - Admin pool (same config): `CREATE SCHEMA "<name>"`.
   - Data pool with `pool.on('connect', c => c.query('SET search_path TO "<name>"'))`,
     then `await initSchema(dataPool)`.
   - `cleanup`: `await dataPool.end()`, `DROP SCHEMA "<name>" CASCADE`, `await admin.end()`.
-  - Per-schema isolation means test files can still run in parallel processes safely.
+  - Per-schema isolation means test files can still run in parallel processes safely,
+    and stay clear of real data even when `APP_ENV` points at `stg`.
 - `readFixture` unchanged.
 - Each test (`players.test.ts`, `analysis.test.ts`, `importTournament.test.ts`):
   - `test('...', async (t) => { const { db, cleanup } = await makeTestDb(); t.after(cleanup); ... })`.
@@ -165,29 +187,32 @@ Mechanical dialect edits across those queries:
 
 ### 7. Config files
 
-- Delete `server/.env.example` (has live creds). Create **`server/.env.defaults`**
-  (committed, no secrets, **no `APP_ENV`**):
+- Replace the old `server/.env.example` (had live creds) with a secret-free template.
+  Create **`server/.env.defaults`** (committed, no secrets, **no `APP_ENV`**):
   ```
   PGUSER=neondb_owner
   PGDATABASE=neondb
+  PGHOST_DEV=ep-<dev-branch>.us-west-2.aws.neon.tech
+  PGHOST_POOLED_DEV=ep-<dev-branch>-pooler.us-west-2.aws.neon.tech
   PGHOST_STG=ep-patient-sound-a64ff7u3.us-west-2.aws.neon.tech
   PGHOST_POOLED_STG=ep-patient-sound-a64ff7u3-pooler.us-west-2.aws.neon.tech
-  PGHOST_TEST=ep-<test-branch>.us-west-2.aws.neon.tech
   # PGHOST_PRD / PGHOST_POOLED_PRD — set in the prod deploy's secret store
   ```
-- Create **`server/.env.local`** (git-ignored) — dev fills these in:
+- Rewrite **`server/.env.example`** (committed template, no secrets) documenting the
+  keys and allowed `APP_ENV` values; a dev copies it to git-ignored
+  **`server/.env.local`** and fills in:
   ```
-  APP_ENV=stg
-  PGPASSWORD_STG=
-  PGPASSWORD_TEST=
+  APP_ENV=dev          # one of dev | stg | prd
+  PGPASSWORD_DEV=
+  PGPASSWORD_STG=       # only needed if APP_ENV=stg
   ```
-  A committed `server/.env.local.example` documents these three keys.
-- `.gitignore`: add `.env.local` (`.env.defaults` and `.env.local.example` stay
-  tracked). The `*.db*` / `data/` lines can stay or be removed.
-- `README.md`: update Requirements (Neon/Postgres, no native build step), Setup (create a
-  Neon `test` branch; add `PGHOST_TEST` to `.env.defaults`; `cp .env.local.example
-  .env.local` and fill in `APP_ENV` + `PGPASSWORD_STG` / `PGPASSWORD_TEST`), Scripts
-  table (layered `--env-file`, `APP_ENV=test` for `npm test`), and the "writes its
+- `.gitignore`: ignore all `.env*` except the committed templates
+  (`!.env.defaults`, `!.env.example`). The `*.db*` / `data/` lines can stay or be
+  removed.
+- `README.md`: update Requirements (Neon/Postgres, no native build step), Setup
+  (`PGHOST_DEV` / `PGHOST_POOLED_DEV` in `.env.defaults`; `cp .env.example .env.local`
+  and fill in `APP_ENV` + `PGPASSWORD_DEV` / `PGPASSWORD_STG`), Scripts table (layered
+  `--env-file`; `npm test` targets whatever `APP_ENV` selects), and the "writes its
   database to `server/data.db`" paragraph (now discrete `PG*_<ENV>` vars; schema
   auto-applied on startup).
 
@@ -198,21 +223,21 @@ Mechanical dialect edits across those queries:
   `server/src/importTournament.ts`, `server/src/routes.ts`, `server/src/server.ts`
 - Tests: `server/src/analysis.test.ts`, `server/src/importTournament.test.ts`,
   `server/src/players.test.ts`
-- Config: `server/package.json`, delete `server/.env.example`, add
-  `server/.env.defaults` + `server/.env.local.example` (committed) +
-  `server/.env.local` (git-ignored), `.gitignore`, `README.md`
+- Config: `server/package.json`, rewrite `server/.env.example` (secret-free template),
+  add `server/.env.defaults` (committed) + `server/.env.local` (git-ignored),
+  `.gitignore`, `README.md`
 - `package-lock.json` regenerated by `npm install`
 
 ## Verification
 
 1. `npm install` (root) — confirm `pg` installed, `better-sqlite3` gone, no native build.
-2. `server/.env.defaults` has the stg + test hosts; `server/.env.local` has
-   `APP_ENV=stg` + `PGPASSWORD_STG` / `PGPASSWORD_TEST` (rotated stg password).
-3. `npm test` — the full server suite passes against the Neon test branch; each run
-   leaves no `test_*` schemas behind (spot-check with `\dn` / a `SELECT` on
+2. `server/.env.defaults` has the `dev` + `stg` hosts; `server/.env.local` has
+   `APP_ENV` (`dev` or `stg`) + `PGPASSWORD_DEV` / `PGPASSWORD_STG`.
+3. `npm test` — the full server suite passes against the branch `APP_ENV` selects; each
+   run leaves no `test_*` schemas behind (spot-check with `\dn` / a `SELECT` on
    `information_schema.schemata`).
-4. `npm run dev` — server boots, logs the listening line, `schema.sql` applied to `stg`
-   (verify tables + seeded `events` 1/2 exist in the Neon `stg` console).
+4. `npm run dev` — server boots, logs the listening line, `schema.sql` applied to the
+   `APP_ENV` branch (verify tables + seeded `events` 1/2 exist in the Neon console).
 5. In the browser (http://localhost:5173):
    - Import `events/`-style OpenGotha `.xml` → 201 with summary; re-upload → 409.
    - Players list shows counts + duplicate hints; open a player → history pagination,

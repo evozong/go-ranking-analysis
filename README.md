@@ -3,18 +3,37 @@
 Local Node + TypeScript web app that ingests Go tournament results (OpenGotha `.xml`
 files) and lets you explore head-to-head history for any player.
 
-- **server/** — Express JSON API (port 3001) + SQLite (`better-sqlite3`).
+- **server/** — Express JSON API (port 3001) + Neon Postgres (`pg`), async data layer.
 - **web/** — React + Vite SPA (port 5173), proxies `/api` → 3001.
 
 ## Requirements
 
-- Node 20+ (developed on Node 26; `better-sqlite3` v13 ships a prebuilt binary for it).
+- Node 22+ (developed on Node 26; uses the built-in `--env-file` / `--env-file-if-exists`).
+- A Neon Postgres project with a `stg` branch and a per-developer `dev` branch. No
+  native build step.
 
 ## Setup
 
 ```
 npm install
 ```
+
+Then configure the server's database connection (`server/`):
+
+1. The `stg` + `dev` branch hosts and shared `PGUSER` / `PGDATABASE` are already
+   in the committed `server/.env.defaults`. If you want your own `dev` branch,
+   create one in the Neon console and point `PGHOST_DEV` / `PGHOST_POOLED_DEV` at
+   it.
+2. `cd server && cp .env.example .env.local`, then fill in:
+   - `APP_ENV` — one of `dev | stg | prd`. Use `dev` locally so both
+     `npm run dev` and `npm test` hit the `dev` branch; `stg` also works.
+   - `PGPASSWORD_DEV` — the `dev` branch role password.
+   - `PGPASSWORD_STG` — the `stg` role password (only needed if `APP_ENV=stg`).
+
+`server/.env.local` is git-ignored. Connection fields are postfixed by
+environment (`PGHOST_DEV`, `PGPASSWORD_DEV`, `PGHOST_STG`, …) and `APP_ENV`
+selects which set is used; prod supplies `APP_ENV=prd` + `PGHOST_PRD` /
+`PGPASSWORD_PRD` from its own secret store.
 
 ## Scripts (run from the repo root)
 
@@ -24,8 +43,17 @@ npm install
 | `npm run build` | type-checks + builds both workspaces |
 | `npm test` | runs the server test suite (`node:test` via `tsx`) |
 
-The API writes its database to `server/data.db` (override with `DB_PATH`). It is
-git-ignored. Delete it to start fresh.
+The server scripts layer env files: `--env-file=.env.defaults` then
+`--env-file-if-exists=.env.local` (later file wins). No script injects `APP_ENV`
+— `npm test` runs against whatever branch `APP_ENV` selects in `.env.local`
+(normally `dev`), and gives each test file its own transient `test_<hex>` schema
+(created and dropped per test) so a run never touches real data even when pointed
+at `stg`. If Neon connection limits bite under parallel test files, add
+`--test-concurrency=1` to the `test` script.
+
+The API connects to Neon Postgres using discrete `PG*_<ENV>` fields (see Setup);
+there is no local database file. `schema.sql` is idempotent and auto-applied on
+startup, including the two seeded `Open` events.
 
 ## Using it
 

@@ -7,3 +7,8 @@ dist/
 *.db-wal
 data/
 .DS_Store
+
+# Env files: ignore everything except the committed templates
+.env*
+!.env.defaults
+!.env.example
