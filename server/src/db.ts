@@ -1,15 +1,26 @@
-import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import 'dotenv/config';
+import pg from 'pg';
+import { ensureSchema as ensureSchemaOn, withTransaction } from './dbCore.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+export type { Pool, PoolClient } from 'pg';
+export { withTransaction };
 
-const DB_PATH = process.env.DB_PATH ?? join(__dirname, '..', 'data.db');
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error(
+    'DATABASE_URL is not set. Copy .env.example to .env and point it at your ' +
+      'staging Postgres database (see plans/03-postgres-stg-prd-migration.md).',
+  );
+}
 
-export const db: Database.Database = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// Neon (and most managed Postgres) require TLS; a plain local Postgres on localhost does not.
+const useSsl = !/localhost|127\.0\.0\.1/.test(connectionString);
 
-const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
-db.exec(schema);
+export const pool = new pg.Pool({
+  connectionString,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
+});
+
+export async function ensureSchema(): Promise<void> {
+  await ensureSchemaOn(pool);
+}

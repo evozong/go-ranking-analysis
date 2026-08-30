@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { Database } from 'better-sqlite3';
+import type { Pool } from 'pg';
+import { withTransaction } from './dbCore.js';
 import { parseOpenGotha, type ParsedGame } from './openGotha.js';
 import { resolveCanonicalPlayer } from './players.js';
 
@@ -22,62 +23,54 @@ export interface ImportSummary {
   nonGames: number;
 }
 
-export function importTournament(db: Database, fileBytes: Buffer): ImportSummary {
+export async function importTournament(pool: Pool, fileBytes: Buffer): Promise<ImportSummary> {
   const hash = createHash('sha256').update(fileBytes).digest('hex');
-
-  const dupe = db
-    .prepare('SELECT id FROM events WHERE source_hash = ?')
-    .get(hash) as { id: number } | undefined;
-  if (dupe) throw new DuplicateImportError(dupe.id);
-
   const parsed = parseOpenGotha(fileBytes.toString('utf8'));
 
-  const run = db.transaction((): ImportSummary => {
-    const eventInfo = db
-      .prepare(
-        `INSERT INTO events (name, date, source_hash, imported_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(parsed.name, parsed.date, hash, new Date().toISOString());
-    const eventId = Number(eventInfo.lastInsertRowid);
-
-    const insertEventPlayer = db.prepare(
-      `INSERT INTO event_players
-         (event_id, player_id, og_key, first_name, last_name, display_name, rank, club, country, egf_pin)
-       VALUES (@event_id, @player_id, @og_key, @first_name, @last_name, @display_name, @rank, @club, @country, @egf_pin)`,
+  return withTransaction(pool, async (client) => {
+    const dupe = await client.query<{ id: number }>(
+      'SELECT id FROM events WHERE source_hash = $1',
+      [hash],
     );
+    if (dupe.rows[0]) throw new DuplicateImportError(dupe.rows[0].id);
+
+    const eventInsert = await client.query<{ id: number }>(
+      `INSERT INTO events (id, name, date, source_hash, imported_at)
+       VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM events), $1, $2, $3, $4)
+       RETURNING id`,
+      [parsed.name, parsed.date, hash, new Date().toISOString()],
+    );
+    const eventId = eventInsert.rows[0].id;
 
     const keyToEventPlayerId = new Map<string, number>();
     let playersCreated = 0;
     let playersMatched = 0;
 
     for (const p of parsed.players) {
-      const { playerId, created } = resolveCanonicalPlayer(db, p.displayName);
+      const { playerId, created } = await resolveCanonicalPlayer(client, p.displayName);
       if (created) playersCreated++;
       else playersMatched++;
 
-      const info = insertEventPlayer.run({
-        event_id: eventId,
-        player_id: playerId,
-        og_key: p.ogKey,
-        first_name: p.firstName,
-        last_name: p.lastName,
-        display_name: p.displayName,
-        rank: p.rank,
-        club: p.club,
-        country: p.country,
-        egf_pin: p.egfPin,
-      });
-      keyToEventPlayerId.set(p.ogKey, Number(info.lastInsertRowid));
+      const epInsert = await client.query<{ id: number }>(
+        `INSERT INTO event_players
+           (event_id, player_id, og_key, first_name, last_name, display_name, rank, club, country, egf_pin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id`,
+        [
+          eventId,
+          playerId,
+          p.ogKey,
+          p.firstName,
+          p.lastName,
+          p.displayName,
+          p.rank,
+          p.club,
+          p.country,
+          p.egfPin,
+        ],
+      );
+      keyToEventPlayerId.set(p.ogKey, epInsert.rows[0].id);
     }
-
-    const insertGame = db.prepare(
-      `INSERT INTO games
-         (event_id, round_number, white_event_player_id, black_event_player_id,
-          winner_event_player_id, is_game, result_type, result_raw, handicap)
-       VALUES (@event_id, @round_number, @white_event_player_id, @black_event_player_id,
-               @winner_event_player_id, @is_game, @result_type, @result_raw, @handicap)`,
-    );
 
     let gamesInserted = 0;
     let nonGames = 0;
@@ -87,23 +80,28 @@ export function importTournament(db: Database, fileBytes: Buffer): ImportSummary
       if (whiteId === undefined) {
         throw new Error(`Game references unknown player key "${g.whiteKey}"`);
       }
-      const blackId =
-        g.blackKey === null ? null : keyToEventPlayerId.get(g.blackKey) ?? null;
+      const blackId = g.blackKey === null ? null : keyToEventPlayerId.get(g.blackKey) ?? null;
       if (g.blackKey !== null && blackId === null) {
         throw new Error(`Game references unknown player key "${g.blackKey}"`);
       }
 
-      insertGame.run({
-        event_id: eventId,
-        round_number: g.roundNumber,
-        white_event_player_id: whiteId,
-        black_event_player_id: blackId,
-        winner_event_player_id: winnerEventPlayerId(g, whiteId, blackId),
-        is_game: g.outcome.isGame ? 1 : 0,
-        result_type: g.outcome.type,
-        result_raw: g.outcome.raw,
-        handicap: g.handicap,
-      });
+      await client.query(
+        `INSERT INTO games
+           (event_id, round_number, white_event_player_id, black_event_player_id,
+            winner_event_player_id, is_game, result_type, result_raw, handicap)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          eventId,
+          g.roundNumber,
+          whiteId,
+          blackId,
+          winnerEventPlayerId(g, whiteId, blackId),
+          g.outcome.isGame ? 1 : 0,
+          g.outcome.type,
+          g.outcome.raw,
+          g.handicap,
+        ],
+      );
       gamesInserted++;
       if (!g.outcome.isGame) nonGames++;
     }
@@ -119,8 +117,6 @@ export function importTournament(db: Database, fileBytes: Buffer): ImportSummary
       nonGames,
     };
   });
-
-  return run();
 }
 
 function winnerEventPlayerId(

@@ -1,5 +1,9 @@
 # Backing Store — DB Migration Plan
 
+> **Superseded** by `plans/03-postgres-stg-prd-migration.md`: the app has since moved from
+> SQLite to a traditional Postgres database with separate staging/production environments.
+> Kept here for the record of the original SQLite-first reasoning.
+
 ## Context
 
 `plans/01-go-ranking-analysis.md` already designs the app's persistence around **SQLite**

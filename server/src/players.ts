@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Queryable } from './dbTypes.js';
 
 // Canonical-name normalization: trim, collapse internal whitespace, lowercase.
 export function normalizeName(name: string): string {
@@ -11,20 +11,24 @@ export interface ResolveResult {
 }
 
 // Match-or-create a canonical player for a raw "First Last" display name.
-export function resolveCanonicalPlayer(db: Database, displayName: string): ResolveResult {
+export async function resolveCanonicalPlayer(
+  db: Queryable,
+  displayName: string,
+): Promise<ResolveResult> {
   const normalized = normalizeName(displayName);
 
-  const existing = db
-    .prepare('SELECT id FROM players WHERE normalized_name = ?')
-    .get(normalized) as { id: number } | undefined;
-
-  if (existing) {
-    return { playerId: existing.id, created: false };
+  const existing = await db.query<{ id: number }>(
+    'SELECT id FROM players WHERE normalized_name = $1',
+    [normalized],
+  );
+  if (existing.rows[0]) {
+    return { playerId: existing.rows[0].id, created: false };
   }
 
-  const info = db
-    .prepare('INSERT INTO players (display_name, normalized_name) VALUES (?, ?)')
-    .run(displayName.trim(), normalized);
+  const inserted = await db.query<{ id: number }>(
+    'INSERT INTO players (display_name, normalized_name) VALUES ($1, $2) RETURNING id',
+    [displayName.trim(), normalized],
+  );
 
-  return { playerId: Number(info.lastInsertRowid), created: true };
+  return { playerId: inserted.rows[0].id, created: true };
 }

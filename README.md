@@ -3,17 +3,22 @@
 Local Node + TypeScript web app that ingests Go tournament results (OpenGotha `.xml`
 files) and lets you explore head-to-head history for any player.
 
-- **server/** — Express JSON API (port 3001) + SQLite (`better-sqlite3`).
+- **server/** — Express JSON API (port 3001) + Postgres (hosted free on [Neon](https://neon.tech)).
 - **web/** — React + Vite SPA (port 5173), proxies `/api` → 3001.
 
 ## Requirements
 
-- Node 20+ (developed on Node 26; `better-sqlite3` v13 ships a prebuilt binary for it).
+- Node 20+.
+- A Postgres database to connect to. See
+  [`plans/03-postgres-stg-prd-migration.md`](plans/03-postgres-stg-prd-migration.md) for
+  setting up a free Neon project with separate staging/production branches — local
+  development always points at staging, never production.
 
 ## Setup
 
 ```
 npm install
+cp server/.env.example server/.env   # then fill in DATABASE_URL (staging connection string)
 ```
 
 ## Scripts (run from the repo root)
@@ -24,8 +29,11 @@ npm install
 | `npm run build` | type-checks + builds both workspaces |
 | `npm test` | runs the server test suite (`node:test` via `tsx`) |
 
-The API writes its database to `server/data.db` (override with `DB_PATH`). It is
-git-ignored. Delete it to start fresh.
+The API connects to Postgres via `DATABASE_URL` (see Setup above) and applies
+`server/src/schema.sql` on every startup — it's idempotent, so this also doubles as the
+project's migration mechanism. `npm test` never touches a real database: it runs against
+an in-memory Postgres-compatible engine ([`pg-mem`](https://github.com/oguimbal/pg-mem)),
+so it stays fast, offline, and can't affect staging or production data.
 
 ## Using it
 
