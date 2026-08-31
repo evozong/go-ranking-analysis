@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build -w web",
+  "outputDirectory": "web/dist",
+  "regions": ["sfo1"],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "server/src/schema.sql"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

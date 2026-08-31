@@ -93,9 +93,10 @@ sign-in isn't locked out.
 
 ### Production
 
-Single origin: with `APP_ENV=prd` the server also serves the built `web/dist`, so
-`/api` and the SPA share an origin and the session cookie is first-party (no
-CORS). Run `npm run build` before deploying.
+Production runs on **Vercel** as a single project (see "Deploying to Vercel"
+below): the static `web/dist` bundle on Vercel's CDN plus one serverless function
+(`api/index.ts`) wrapping the Express app, both on the same Vercel domain. `/api`
+and the SPA share an origin, so the session cookie stays first-party (no CORS).
 
 ## Scripts (run from the repo root)
 
@@ -116,6 +117,70 @@ at `stg`. If Neon connection limits bite under parallel test files, add
 The API connects to Neon Postgres using discrete `PG*_<ENV>` fields (see Setup);
 there is no local database file. `schema.sql` is idempotent and auto-applied on
 startup, including the two seeded `Open` events.
+
+## Deploying to Vercel
+
+One Vercel project serves both halves from the same domain:
+
+- **`web/dist`** → Vercel's CDN (`buildCommand: npm run build -w web`).
+- **`api/index.ts`** → a single serverless function that exports the Express
+  `app` from `server/src/app.ts`. `vercel.json` rewrites every `/api/*` path to
+  it and everything else to `/index.html` (SPA history fallback).
+
+`server/src/app.ts` builds the app; `server/src/server.ts` is only the local-dev
+`listen` entry. Schema init is a lazy, memoized gate (`ensureSchema()`), run once
+per warm function instance on the first request — `schema.sql` is idempotent so a
+cross-instance double-run is harmless. `schema.sql` ships with the function via
+`includeFiles` in `vercel.json`; `db.ts` reads it from `server/src/schema.sql`
+relative to `process.cwd()` when the bundled sibling path is gone.
+
+### One-time setup
+
+1. **Neon `prd` branch** — create it in the Neon console; note its direct host,
+   pooled host, and role password. Schema + the owner-email seed apply on the
+   first request.
+2. **Google OAuth client** — add `https://<domain>/api/auth/callback` to the
+   shared client's Authorized redirect URIs, and make sure the consent screen is
+   **Published** (or every invitee is a test user). Preview deployments get
+   unique `*.vercel.app` URLs that Google won't accept, so auth only works on the
+   stable production domain.
+3. **`vercel link`** the repo (`npm i -g vercel` first).
+4. **Environment variables** (Vercel → Project → Settings → Environment
+   Variables, Production) — Vercel does not read `.env.defaults`, so set them all:
+
+   | Var | Value |
+   |---|---|
+   | `APP_ENV` | `prd` |
+   | `PGUSER` | `neondb_owner` |
+   | `PGDATABASE` | `neondb` |
+   | `PGHOST_PRD` | Neon `prd` direct host |
+   | `PGHOST_POOLED_PRD` | Neon `prd` pooled host |
+   | `PGPASSWORD_PRD` | Neon `prd` role password |
+   | `PGPOOL_MAX` | `1` (or `2`) — one pool per warm instance |
+   | `AUTH_GOOGLE_CLIENT_ID` | existing OAuth client |
+   | `AUTH_GOOGLE_CLIENT_SECRET` | existing OAuth client |
+   | `AUTH_SESSION_SECRET` | fresh `openssl rand -base64 48` |
+   | `AUTH_REDIRECT_URI` | `https://<domain>/api/auth/callback` |
+   | `AUTH_WEB_ORIGIN` | `https://<domain>` (no trailing slash) |
+   | `AUTH_SESSION_TTL_DAYS` | optional |
+
+   `cookieSecure` is already `true` whenever `APP_ENV !== 'DEV'`.
+
+### Deploy & verify
+
+1. `vercel --prod` (or push and promote from the dashboard).
+2. `https://<domain>/` → landing page renders when not signed in.
+3. `GET /api/auth/me` → `{ authenticated: false, authorised: false }`.
+4. Sign in with the owner Google account → redirected home, full app.
+5. Import a small OpenGotha `.xml`, browse Events / Players, exercise a merge.
+6. Function logs: schema init runs once per cold start; no pool exhaustion.
+
+### Known limits
+
+- Vercel caps the request body at 4.5 MB; `multer` is set to 4 MB so oversize
+  uploads fail as a clean 413. OpenGotha files are well under 1 MB.
+- Cold starts pay schema init + Neon TLS handshake. Fine for an invite-only tool.
+- The allowlist cache (~60 s) and the schema-init promise are per warm instance.
 
 ## Using it
 

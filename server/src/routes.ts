@@ -23,7 +23,10 @@ import {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  // Cap at 4 MB: Vercel serverless caps the request body at 4.5 MB, so an
+  // oversize upload fails cleanly here as a 413 rather than a platform error.
+  // OpenGotha XML files are well under 1 MB in practice.
+  limits: { fileSize: 4 * 1024 * 1024 },
 });
 
 function intParam(v: unknown): number | undefined {

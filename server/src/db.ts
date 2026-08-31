@@ -47,7 +47,9 @@ export function connConfig({ direct = false }: { direct?: boolean } = {}): pg.Po
     password,
     database: process.env.PGDATABASE,
     ssl: { rejectUnauthorized: true }, // Neon: TLS + SCRAM channel binding handled by pg
-    max: 10,
+    // Each warm serverless instance holds its own pool, so keep it small in
+    // prod (set PGPOOL_MAX=1 or 2 in Vercel); defaults to 10 for local dev/tests.
+    max: Number(process.env.PGPOOL_MAX ?? 10),
   };
 }
 
@@ -67,7 +69,19 @@ export interface Queryable {
 // isolated-schema pool satisfy this.
 export type Db = pg.Pool;
 
-const schemaSql = readFileSync(join(here, 'schema.sql'), 'utf8');
+// Local dev/tests: schema.sql sits next to this file. On Vercel the function is
+// bundled so the sibling path disappears; `includeFiles` in vercel.json ships
+// schema.sql at server/src/schema.sql relative to the project root, so fall
+// back to a cwd-relative path.
+function readSchemaSql(): string {
+  try {
+    return readFileSync(join(here, 'schema.sql'), 'utf8');
+  } catch {
+    return readFileSync(join(process.cwd(), 'server/src/schema.sql'), 'utf8');
+  }
+}
+
+const schemaSql = readSchemaSql();
 
 // Apply the (idempotent) schema. Safe to run on every startup.
 export async function initSchema(db: Queryable = pool): Promise<void> {
