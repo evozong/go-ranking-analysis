@@ -454,6 +454,88 @@ export async function mergePlayers(
   });
 }
 
+export class DeleteEventError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export interface DeleteEventResult {
+  eventId: number;
+  deletedGames: number;
+  deletedEventPlayers: number;
+  deletedCanonicalPlayers: number;
+}
+
+// Hard-delete an imported event and everything hanging off it (its games and
+// event_players), then drop any canonical player left with no remaining
+// event_players. Deliberately NOT combined with a re-import: a caller that
+// deletes in order to re-import accepts that a failed re-import leaves the event
+// gone. Only imported events can be deleted — the seeded containers
+// "Open (Ranked)" / "Open (Unranked)" (ids 1, 2, and the only rows with a NULL
+// source_hash) are protected.
+export async function deleteEvent(
+  db: Db,
+  eventId: number,
+): Promise<DeleteEventResult> {
+  if (eventId <= 2) {
+    throw new DeleteEventError(
+      'The "Open (Ranked)" and "Open (Unranked)" events cannot be deleted',
+    );
+  }
+  return withTransaction(db, async (client): Promise<DeleteEventResult> => {
+    const found = (
+      await client.query(
+        'SELECT id, source_hash FROM events WHERE id = $1',
+        [eventId],
+      )
+    ).rows[0] as { id: number; source_hash: string | null } | undefined;
+    if (!found) throw new DeleteEventError('event not found', 404);
+    if (found.source_hash === null) {
+      throw new DeleteEventError('This event was not imported and cannot be deleted');
+    }
+
+    const canonicalIds = (
+      await client.query(
+        `SELECT DISTINCT player_id FROM event_players
+         WHERE event_id = $1 AND player_id IS NOT NULL`,
+        [eventId],
+      )
+    ).rows.map((r) => (r as { player_id: number }).player_id);
+
+    const deletedGames =
+      (await client.query('DELETE FROM games WHERE event_id = $1', [eventId]))
+        .rowCount ?? 0;
+    const deletedEventPlayers =
+      (await client.query('DELETE FROM event_players WHERE event_id = $1', [eventId]))
+        .rowCount ?? 0;
+    await client.query('DELETE FROM events WHERE id = $1', [eventId]);
+
+    let deletedCanonicalPlayers = 0;
+    for (const pid of canonicalIds) {
+      const stillUsed = (
+        await client.query(
+          'SELECT 1 FROM event_players WHERE player_id = $1 LIMIT 1',
+          [pid],
+        )
+      ).rows[0];
+      if (!stillUsed) {
+        await client.query('DELETE FROM players WHERE id = $1', [pid]);
+        deletedCanonicalPlayers++;
+      }
+    }
+
+    return {
+      eventId,
+      deletedGames,
+      deletedEventPlayers,
+      deletedCanonicalPlayers,
+    };
+  });
+}
+
 export interface DuplicateHint {
   reason: 'egf' | 'name';
   playerIds: number[];

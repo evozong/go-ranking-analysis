@@ -32,6 +32,10 @@ interface Feedback {
 
 const NO_FEEDBACK: Feedback = { summary: null, error: null, dupeEventId: null };
 
+function ok(summary: ImportSummary): Feedback {
+  return { summary, error: null, dupeEventId: null };
+}
+
 function toFeedback(err: unknown): Feedback {
   if (err instanceof ApiError) {
     return {
@@ -46,20 +50,76 @@ function toFeedback(err: unknown): Feedback {
   return { summary: null, error: (err as Error).message, dupeEventId: null };
 }
 
-function FeedbackPanel({ feedback }: { feedback: Feedback }) {
+// Shared import runner: an `attempt` that reports success/failure as Feedback,
+// and an `override` that (on a duplicate 409) deletes the existing event via the
+// DELETE /events/:id API and then re-runs the same import.
+function useImportRun() {
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(NO_FEEDBACK);
+
+  async function attempt(fn: () => Promise<Feedback>) {
+    setBusy(true);
+    setFeedback(NO_FEEDBACK);
+    try {
+      setFeedback(await fn());
+    } catch (err) {
+      setFeedback(toFeedback(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function override(fn: () => Promise<Feedback>) {
+    const id = feedback.dupeEventId;
+    if (id == null) return;
+    if (
+      !window.confirm(
+        'Delete the existing event — all of its games and players — and then ' +
+          're-import? This cannot be undone; if the re-import fails, the event ' +
+          'stays deleted.',
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.deleteEvent(id);
+    } catch (err) {
+      setFeedback(toFeedback(err));
+      setBusy(false);
+      return;
+    }
+    await attempt(fn);
+  }
+
+  return { busy, feedback, setFeedback, attempt, override };
+}
+
+function FeedbackPanel({
+  feedback,
+  busy,
+  onOverride,
+}: {
+  feedback: Feedback;
+  busy: boolean;
+  onOverride: () => void;
+}) {
   const { summary, error, dupeEventId } = feedback;
   return (
     <>
       {error && (
-        <p className="error">
-          {error}
+        <div className="error">
+          <p style={{ margin: 0 }}>{error}</p>
           {dupeEventId != null && (
-            <>
-              {' '}
-              <Link to={`/events/${dupeEventId}`}>View the existing event</Link>.
-            </>
+            <p style={{ margin: '0.5rem 0 0' }}>
+              <Link to={`/events/${dupeEventId}`}>View the existing event</Link>
+              {' · '}
+              <button type="button" onClick={onOverride} disabled={busy}>
+                Delete and override existing data
+              </button>
+            </p>
           )}
-        </p>
+        </div>
       )}
       {summary && (
         <div className="ok">
@@ -88,8 +148,7 @@ function StandingsCsvSection() {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(NO_FEEDBACK);
+  const { busy, feedback, setFeedback, attempt, override } = useImportRun();
 
   function onFile(f: File | null) {
     setFile(f);
@@ -101,31 +160,23 @@ function StandingsCsvSection() {
     }
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file || !name.trim()) return;
-    setBusy(true);
-    setFeedback(NO_FEEDBACK);
-    try {
-      const result = await api.importStandings(file, name.trim(), date);
-      // Hand the generated OpenGotha XML back to the user as a download.
-      const url = URL.createObjectURL(
-        new Blob([result.xml], { type: 'application/xml' }),
-      );
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setFeedback({ summary: result, error: null, dupeEventId: null });
-    } catch (err) {
-      setFeedback(toFeedback(err));
-    } finally {
-      setBusy(false);
-    }
+  async function runImport(): Promise<Feedback> {
+    const result = await api.importStandings(file!, name.trim(), date);
+    // Hand the generated OpenGotha XML back to the user as a download.
+    const url = URL.createObjectURL(
+      new Blob([result.xml], { type: 'application/xml' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = result.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return ok(result);
   }
+
+  const ready = !!file && !!name.trim();
 
   return (
     <section>
@@ -136,7 +187,12 @@ function StandingsCsvSection() {
         converted to an OpenGotha <code>.xml</code> (downloaded automatically) and
         imported. Name and date pre-fill from the filename and stay editable.
       </p>
-      <form onSubmit={submit}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ready) attempt(runImport);
+        }}
+      >
         <p>
           <input
             type="file"
@@ -165,40 +221,37 @@ function StandingsCsvSection() {
             />
           </label>
         </p>
-        <button type="submit" disabled={!file || !name.trim() || busy}>
+        <button type="submit" disabled={!ready || busy}>
           {busy ? 'Importing…' : 'Convert & import'}
         </button>
       </form>
-      <FeedbackPanel feedback={feedback} />
+      <FeedbackPanel
+        feedback={feedback}
+        busy={busy}
+        onOverride={() => override(runImport)}
+      />
     </section>
   );
 }
 
 function OpenGothaXmlSection() {
   const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(NO_FEEDBACK);
+  const { busy, feedback, setFeedback, attempt, override } = useImportRun();
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) return;
-    setBusy(true);
-    setFeedback(NO_FEEDBACK);
-    try {
-      const summary = await api.importFile(file);
-      setFeedback({ summary, error: null, dupeEventId: null });
-    } catch (err) {
-      setFeedback(toFeedback(err));
-    } finally {
-      setBusy(false);
-    }
+  async function runImport(): Promise<Feedback> {
+    return ok(await api.importFile(file!));
   }
 
   return (
     <section>
       <h2>Import from OpenGotha XML</h2>
       <p className="muted">Upload one OpenGotha tournament file (.xml).</p>
-      <form onSubmit={submit}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (file) attempt(runImport);
+        }}
+      >
         <input
           type="file"
           accept=".xml,text/xml,application/xml"
@@ -211,7 +264,11 @@ function OpenGothaXmlSection() {
           {busy ? 'Importing…' : 'Import'}
         </button>
       </form>
-      <FeedbackPanel feedback={feedback} />
+      <FeedbackPanel
+        feedback={feedback}
+        busy={busy}
+        onOverride={() => override(runImport)}
+      />
     </section>
   );
 }

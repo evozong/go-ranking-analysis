@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  deleteEvent,
+  DeleteEventError,
   findDuplicateHints,
   getPlayerDetail,
   mergePlayers,
@@ -75,6 +77,66 @@ test('mergePlayers repoints event_players onto the keeper and deletes merged row
     ])
   ).rows[0] as { n: number };
   assert.equal(onKeeper.n, 5);
+});
+
+test('deleteEvent removes the event, its games/event_players, and orphaned canonical players', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
+
+  const evId = (
+    await db.query(
+      "INSERT INTO events (name, source_hash) VALUES ('Cup', 'test-hash') RETURNING id",
+    )
+  ).rows[0].id as number;
+
+  const solo = (await resolveCanonicalPlayer(db, 'Solo Player')).playerId;
+  const shared = (await resolveCanonicalPlayer(db, 'Shared Player')).playerId;
+
+  const ep1 = await addEp(db, evId, solo, 's1');
+  const ep2 = await addEp(db, evId, shared, 'h1');
+  await addEp(db, 1, shared, 'h-open'); // `shared` also appears in a seeded event
+  await addGame(db, evId, ep1, ep2, ep1);
+
+  const res = await deleteEvent(db, evId);
+  assert.deepEqual(res, {
+    eventId: evId,
+    deletedGames: 1,
+    deletedEventPlayers: 2,
+    deletedCanonicalPlayers: 1, // only `solo`; `shared` is still used by event 1
+  });
+
+  const count = async (sql: string, p: unknown[]) =>
+    ((await db.query(sql, p)).rows[0] as { n: number }).n;
+  assert.equal(await count('SELECT COUNT(*)::int n FROM events WHERE id = $1', [evId]), 0);
+  assert.equal(await count('SELECT COUNT(*)::int n FROM games WHERE event_id = $1', [evId]), 0);
+  assert.equal(await count('SELECT COUNT(*)::int n FROM players WHERE id = $1', [solo]), 0);
+  assert.equal(await count('SELECT COUNT(*)::int n FROM players WHERE id = $1', [shared]), 1);
+});
+
+test('deleteEvent refuses the Open containers, non-imported events, and unknown ids', async (t) => {
+  const { db, cleanup } = await makeTestDb();
+  t.after(cleanup);
+
+  // ids 1 & 2 are "Open (Ranked)" / "Open (Unranked)"
+  await assert.rejects(() => deleteEvent(db, 1), DeleteEventError);
+  await assert.rejects(() => deleteEvent(db, 2), DeleteEventError);
+  await assert.rejects(() => deleteEvent(db, 99999), DeleteEventError);
+
+  // an event with no import source (NULL source_hash) is also protected
+  const bare = (
+    await db.query("INSERT INTO events (name) VALUES ('Manual') RETURNING id")
+  ).rows[0].id as number;
+  await assert.rejects(() => deleteEvent(db, bare), DeleteEventError);
+  assert.equal(
+    ((await db.query('SELECT COUNT(*)::int n FROM events WHERE id = $1', [bare])).rows[0] as { n: number }).n,
+    1,
+  );
+
+  // the two Open rows are still there
+  assert.equal(
+    ((await db.query('SELECT COUNT(*)::int n FROM events WHERE id IN (1,2)')).rows[0] as { n: number }).n,
+    2,
+  );
 });
 
 test('mergePlayers rejects keepId inside mergeIds and unknown ids', async (t) => {

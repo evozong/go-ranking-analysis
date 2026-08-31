@@ -144,6 +144,13 @@ export const api = {
       { method: 'POST', body: fd },
     );
   },
+  deleteEvent: (id: number | string) =>
+    req<{
+      eventId: number;
+      deletedGames: number;
+      deletedEventPlayers: number;
+      deletedCanonicalPlayers: number;
+    }>(`/api/events/${id}`, { method: 'DELETE' }),
   players: () => req<PlayerListItem[]>('/api/players'),
   playerDuplicateHints: () =>
     req<DuplicateHint[]>('/api/players/duplicate-hints'),

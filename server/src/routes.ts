@@ -13,6 +13,8 @@ import {
   StandingsParseError,
 } from './standingsCsv.js';
 import {
+  deleteEvent,
+  DeleteEventError,
   findDuplicateHints,
   getEvent,
   getEventPlayers,
@@ -226,6 +228,24 @@ export function createRouter(db: Db): Router {
       const id = intParam(req.params.id);
       if (id === undefined) return res.status(400).json({ error: 'bad id' });
       return res.json(await getEventPlayers(db, id));
+    }),
+  );
+
+  // Hard-delete an event and all its data. Also the primitive the import routes
+  // reuse for "delete and override" when a duplicate is detected.
+  r.delete(
+    '/events/:id',
+    asyncHandler(async (req, res) => {
+      const id = intParam(req.params.id);
+      if (id === undefined) return res.status(400).json({ error: 'bad id' });
+      try {
+        return res.json(await deleteEvent(db, id));
+      } catch (err) {
+        if (err instanceof DeleteEventError) {
+          return res.status(err.status).json({ error: err.message });
+        }
+        throw err;
+      }
     }),
   );
 

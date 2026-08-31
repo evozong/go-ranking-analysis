@@ -188,15 +188,24 @@ relative to `process.cwd()` when the bundled sibling path is gone.
 ## Using it
 
 1. `npm run dev`, open http://localhost:5173.
-2. **Import** → upload an OpenGotha `.xml`. Re-uploading the same file is rejected (409).
-   Or switch to **Standings CSV** mode and upload a parsed standings-table CSV
-   (`Num,Pl,Name,Female,Rk,NbW,R1..Rn,NBW,SOS,SOSOS`): it is converted to a
-   DTD-conformant OpenGotha `.xml` (downloaded automatically) and imported through
-   the same pipeline in one request. Name/date pre-fill from the filename and stay
-   editable. Short-format standings can't mark forfeits, so every played result
-   becomes a plain game; `0+` is a bye, `0-` a not-paired round. Re-importing a
-   CSV whose tournament name + date already exist is rejected (409), as is
-   re-uploading the generated `.xml` through the OpenGotha path.
+2. **Import** has two sections:
+   - **Import from OpenGotha XML** — upload an OpenGotha `.xml`.
+   - **Import from Standings CSV** — upload a parsed standings-table CSV
+     (`Num,Pl,Name,Female,Rk,NbW,R1..Rn,NBW,SOS,SOSOS`): it is converted to a
+     DTD-conformant OpenGotha `.xml` (downloaded automatically) and imported
+     through the same pipeline in one request. Name/date pre-fill from the
+     filename and stay editable. Short-format standings can't mark forfeits, so
+     every played result becomes a plain game; `0+` is a bye, `0-` a not-paired
+     round.
+
+   A duplicate is rejected with a 409: re-uploading the same OpenGotha file, or a
+   standings CSV whose tournament name + date already exist (the generated `.xml`
+   also round-trips to a 409 through the OpenGotha path). The 409 offers two
+   choices — **View the existing event**, or **Delete and override existing
+   data**, which calls `DELETE /api/events/:id` to hard-delete the existing event
+   and all its games/players, then re-runs the import. If that re-import fails the
+   event stays deleted. The seeded `Open (Ranked)` / `Open (Unranked)` containers
+   (and any event with no import source) cannot be deleted.
 3. **Events** / **Players** to browse; a player page shows reverse-chronological game
    history plus opponents split into losing / even / winning records.
 4. On an event page you can **remap** a mis-matched player to the correct canonical

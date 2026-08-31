@@ -125,3 +125,66 @@ test('a malformed CSV is a 422', async (t) => {
   });
   assert.equal(res.status, 422);
 });
+
+test('DELETE /events/:id hard-deletes the event and its data', async (t) => {
+  const { base } = await startApp(t);
+
+  const imp = await fetch(`${base}/api/standings/import`, {
+    method: 'POST',
+    body: form(sampleCsv, 'Club Championship', '2025-04-19'),
+  });
+  const { eventId } = await imp.json();
+
+  const del = await fetch(`${base}/api/events/${eventId}`, { method: 'DELETE' });
+  assert.equal(del.status, 200);
+  const body = await del.json();
+  assert.equal(body.eventId, eventId);
+  assert.equal(body.deletedEventPlayers, 13);
+
+  const gone = await fetch(`${base}/api/events/${eventId}`);
+  assert.equal(gone.status, 404);
+});
+
+test('DELETE /events/:id refuses seeded events (400) and unknown ids (404)', async (t) => {
+  const { base } = await startApp(t);
+  assert.equal((await fetch(`${base}/api/events/1`, { method: 'DELETE' })).status, 400);
+  assert.equal(
+    (await fetch(`${base}/api/events/99999`, { method: 'DELETE' })).status,
+    404,
+  );
+});
+
+test('delete-and-override: DELETE the duplicate, then re-import succeeds', async (t) => {
+  const { base } = await startApp(t);
+
+  const first = await fetch(`${base}/api/standings/import`, {
+    method: 'POST',
+    body: form(sampleCsv, 'Club Championship', '2025-04-19'),
+  });
+  const firstId = (await first.json()).eventId;
+
+  const dupe = await fetch(`${base}/api/standings/import`, {
+    method: 'POST',
+    body: form(sampleCsv, 'Club Championship', '2025-04-19'),
+  });
+  assert.equal(dupe.status, 409);
+
+  // This is exactly what the "Delete and override existing data" button does.
+  const del = await fetch(`${base}/api/events/${firstId}`, { method: 'DELETE' });
+  assert.equal(del.status, 200);
+
+  const retry = await fetch(`${base}/api/standings/import`, {
+    method: 'POST',
+    body: form(sampleCsv, 'Club Championship', '2025-04-19'),
+  });
+  assert.equal(retry.status, 201);
+  const retryBody = await retry.json();
+  assert.notEqual(retryBody.eventId, firstId);
+  assert.equal(retryBody.eventPlayers, 13);
+
+  const events = await (await fetch(`${base}/api/events`)).json();
+  assert.equal(
+    events.filter((e: any) => e.name === 'Club Championship').length,
+    1,
+  );
+});
