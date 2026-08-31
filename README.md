@@ -123,9 +123,12 @@ startup, including the two seeded `Open` events.
 One Vercel project serves both halves from the same domain:
 
 - **`web/dist`** → Vercel's CDN (`buildCommand: npm run build -w web`).
-- **`api/index.ts`** → a single serverless function that exports the Express
-  `app` from `server/src/app.ts`. `vercel.json` rewrites every `/api/*` path to
-  it and everything else to `/index.html` (SPA history fallback).
+- **`api/index.ts`** → a single serverless function that forwards each request
+  to the Express `app` from `server/src/app.ts`. Vercel compiles the entry to
+  CommonJS while the server workspace is native ESM, so the app is pulled in
+  through a memoized dynamic `import()` rather than a static re-export.
+  `vercel.json` rewrites every `/api/*` path to it and everything else to
+  `/index.html` (SPA history fallback).
 
 `server/src/app.ts` builds the app; `server/src/server.ts` is only the local-dev
 `listen` entry. Schema init is a lazy, memoized gate (`ensureSchema()`), run once
