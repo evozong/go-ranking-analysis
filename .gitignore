@@ -13,3 +13,4 @@ data/
 .env*
 !.env.defaults
 !.env.example
+.vercel
