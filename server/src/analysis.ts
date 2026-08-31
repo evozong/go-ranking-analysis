@@ -571,8 +571,22 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-function namesSimilar(a: string, b: string): boolean {
-  if (a === b) return false;
+// The standings-CSV importer weaves a "Female" flag into the real name as a
+// trailing " (F)" marker (see standingsCsv.ts). It is not part of the person's
+// name for matching purposes: keeping it lets it both mask a real duplicate
+// ("Jane Doe (F)" vs "Jane Doe", edit distance 4) and manufacture a false one
+// (the shared " (f)" padding pulling two short names under the distance cap).
+function stripGenderMarker(name: string): string {
+  return name.replace(/\s*\(f\)$/, '').trim();
+}
+
+function namesSimilar(rawA: string, rawB: string): boolean {
+  if (rawA === rawB) return false;
+  const a = stripGenderMarker(rawA);
+  const b = stripGenderMarker(rawB);
+  // Equal only after dropping the marker ("Jane Doe (F)" vs "Jane Doe"): two
+  // canonical rows for what is almost certainly one person.
+  if (a === b) return true;
   const ta = a.split(/\s+/).filter(Boolean).sort();
   const tb = b.split(/\s+/).filter(Boolean).sort();
   if (ta.length === tb.length && ta.join(' ') === tb.join(' ')) return true;

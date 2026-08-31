@@ -162,6 +162,10 @@ test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occu
   const yan = (await resolveCanonicalPlayer(db, 'Yan Beta')).playerId;
   const kate = (await resolveCanonicalPlayer(db, 'Kate Ray')).playerId;
   const kata = (await resolveCanonicalPlayer(db, 'Kata Ray')).playerId;
+  const amyF = (await resolveCanonicalPlayer(db, 'Amy Lin (F)')).playerId;
+  const amy = (await resolveCanonicalPlayer(db, 'Amy Lin')).playerId;
+  const bo = (await resolveCanonicalPlayer(db, 'Bo (F)')).playerId;
+  const cy = (await resolveCanonicalPlayer(db, 'Cy (F)')).playerId;
 
   // John / Jon: similar name, disjoint events -> name hint.
   await addEp(db, 1, john, 'john1');
@@ -174,6 +178,14 @@ test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occu
   // Kate / Kata: similar name but both play in event 1 -> suppressed.
   await addEp(db, 1, kate, 'kate1');
   await addEp(db, 1, kata, 'kata1');
+
+  // "Amy Lin (F)" / "Amy Lin": same name once the CSV gender marker is dropped
+  // -> name hint. Bo (F) / Cy (F): the shared marker must not by itself pull
+  // two unrelated short names together.
+  await addEp(db, 1, amyF, 'amyf1');
+  await addEp(db, 2, amy, 'amy2');
+  await addEp(db, 1, bo, 'bo1');
+  await addEp(db, 2, cy, 'cy2');
 
   const hints = await findDuplicateHints(db);
 
@@ -193,6 +205,23 @@ test('findDuplicateHints flags similar names, shared EGF pins, and skips co-occu
     (h) => h.playerIds.includes(kate) && h.playerIds.includes(kata),
   );
   assert.equal(suppressed, false, 'co-occurring pair must not produce a hint');
+
+  const markerHint = hints.find(
+    (h) =>
+      h.reason === 'name' &&
+      h.playerIds.includes(amyF) &&
+      h.playerIds.includes(amy),
+  );
+  assert.ok(markerHint, 'expected a name hint for "Amy Lin (F)" / "Amy Lin"');
+
+  const markerFalsePositive = hints.some(
+    (h) => h.playerIds.includes(bo) && h.playerIds.includes(cy),
+  );
+  assert.equal(
+    markerFalsePositive,
+    false,
+    'the shared " (F)" marker must not manufacture a hint',
+  );
 });
 
 test('getPlayerDetail reports per-event wins and orders opponent records by wins', async (t) => {
