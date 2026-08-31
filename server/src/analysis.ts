@@ -217,14 +217,23 @@ export interface EventListItem {
   date: string | null;
   gameCount: number;
   playerCount: number;
+  // False for the seeded "Open" containers and any event with no import source;
+  // mirrors the guard in deleteEvent().
+  deletable: boolean;
 }
+
+// `e.id > 2` excludes the seeded "Open (Ranked)" / "Open (Unranked)" rows;
+// a NULL source_hash marks an event that wasn't imported. Keep in sync with
+// deleteEvent().
+const DELETABLE_SQL = '(e.id > 2 AND e.source_hash IS NOT NULL) AS "deletable"';
 
 export async function listEvents(db: Queryable): Promise<EventListItem[]> {
   return (
     await db.query(
       `SELECT e.id, e.name, e.date,
          (SELECT COUNT(*)::int FROM games g WHERE g.event_id = e.id AND g.is_game = 1) AS "gameCount",
-         (SELECT COUNT(*)::int FROM event_players ep WHERE ep.event_id = e.id) AS "playerCount"
+         (SELECT COUNT(*)::int FROM event_players ep WHERE ep.event_id = e.id) AS "playerCount",
+         ${DELETABLE_SQL}
        FROM events e
        ORDER BY e.date IS NULL, e.date DESC, e.id DESC`,
     )
@@ -240,7 +249,8 @@ export async function getEvent(
       await db.query(
         `SELECT e.id, e.name, e.date,
            (SELECT COUNT(*)::int FROM games g WHERE g.event_id = e.id AND g.is_game = 1) AS "gameCount",
-           (SELECT COUNT(*)::int FROM event_players ep WHERE ep.event_id = e.id) AS "playerCount"
+           (SELECT COUNT(*)::int FROM event_players ep WHERE ep.event_id = e.id) AS "playerCount",
+           ${DELETABLE_SQL}
          FROM events e WHERE e.id = $1`,
         [eventId],
       )

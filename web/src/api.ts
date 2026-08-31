@@ -78,6 +78,8 @@ export interface EventListItem {
   date: string | null;
   gameCount: number;
   playerCount: number;
+  // Seeded "Open" containers and non-imported events cannot be deleted.
+  deletable: boolean;
 }
 
 export interface EventPlayerRow {
