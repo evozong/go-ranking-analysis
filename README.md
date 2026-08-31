@@ -35,6 +35,68 @@ environment (`PGHOST_DEV`, `PGPASSWORD_DEV`, `PGHOST_STG`, …) and `APP_ENV`
 selects which set is used; prod supplies `APP_ENV=prd` + `PGHOST_PRD` /
 `PGPASSWORD_PRD` from its own secret store.
 
+## Authentication (Google sign-in, invite-only)
+
+The whole app sits behind Google sign-in and an **invite list**. Not signed in →
+only the public landing page (`/`); every data API returns 401. Signed in but not
+invited → still only the landing page; APIs return 403. Signed in **and** on the
+list → the full app.
+
+### One-time Google Cloud setup
+
+1. Google Cloud Console → **APIs & Services → Credentials → Create OAuth client
+   ID → Web application**.
+2. **Authorized redirect URIs** — add every environment's callback (one client is
+   shared across all of them; this isn't app data):
+   - `http://localhost:3001/api/auth/callback` — dev **and** `npm test`
+   - `https://<stg-host>/api/auth/callback` — staging
+   - `https://<prod-host>/api/auth/callback` — production
+3. **OAuth consent screen**: External; scopes `openid`, `email`, `profile`. While
+   the screen is in "Testing" only listed test users can sign in — either add the
+   invitees as test users or click **Publish app** (no verification needed for
+   these basic scopes).
+4. Copy the **Client ID** and **Client secret** into `server/.env.local`.
+
+### Env vars (`server/.env.local`)
+
+```
+AUTH_GOOGLE_CLIENT_ID=...
+AUTH_GOOGLE_CLIENT_SECRET=...
+AUTH_SESSION_SECRET=...     # 32+ random bytes, base64: openssl rand -base64 48
+# AUTH_SESSION_TTL_DAYS=7   # optional, sliding session lifetime (default 7)
+```
+
+`AUTH_REDIRECT_URI` and `AUTH_WEB_ORIGIN` default to `localhost` in the committed
+`server/.env.defaults`; stg/prd override them (plus the three secrets) from their
+secret store. The server refuses to start (and `npm test` for `auth.test.ts`
+falls back to dummy values) if the three secrets are missing.
+
+The session is a stateless signed `HttpOnly` cookie (`jose`, HS256) with a
+sliding 7-day window; there is no session table. Google tokens never reach the
+browser — the server is the OIDC client and issues its own session.
+
+### Managing the invite list
+
+The `allowed_emails` table **is** the mechanism — no env var, no CLI. Add or
+remove invitees by editing rows directly (Neon console / `psql`):
+
+```sql
+INSERT INTO allowed_emails (email) VALUES ('friend@example.com')
+  ON CONFLICT (email) DO NOTHING;
+DELETE FROM allowed_emails WHERE email = 'friend@example.com';
+```
+
+Emails are stored lowercased. Authorisation is re-checked per request with a
+~60-second in-process cache, so a change takes effect within a minute — no
+restart, no re-login. `schema.sql` seeds the owner's own email so the first
+sign-in isn't locked out.
+
+### Production
+
+Single origin: with `APP_ENV=prd` the server also serves the built `web/dist`, so
+`/api` and the SPA share an origin and the session cookie is first-party (no
+CORS). Run `npm run build` before deploying.
+
 ## Scripts (run from the repo root)
 
 | command | what it does |

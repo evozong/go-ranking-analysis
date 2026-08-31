@@ -181,3 +181,88 @@ button:disabled {
   background: var(--bg-alt);
   font-size: 0.9rem;
 }
+
+/* --- auth: landing page + profile menu --------------------------------- */
+
+.landing {
+  max-width: 34rem;
+}
+
+.landing p {
+  line-height: 1.5;
+}
+
+/* Push the profile control to the right edge of the header, whether or not
+   the nav links are shown. */
+.topnav .profile,
+.topnav .profile-signin {
+  margin-left: auto;
+}
+
+.profile {
+  position: relative;
+}
+
+.profile-avatar {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--link);
+  color: #fff;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-initial {
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.profile-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 12rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 0.5rem;
+  z-index: 20;
+}
+
+.profile-id {
+  padding: 0.15rem 0.35rem 0.4rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.4rem;
+  word-break: break-all;
+}
+
+.profile-name {
+  font-weight: 600;
+}
+
+.profile-signout {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0.35rem;
+  border-radius: 3px;
+}
+
+.profile-signout:hover {
+  background: var(--bg-alt);
+}

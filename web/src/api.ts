@@ -110,10 +110,17 @@ export class ApiError extends Error {
 }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(url, { credentials: 'same-origin', ...init });
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, body);
+  if (!res.ok) {
+    // A 401 from any data call means the session is gone — let AuthProvider
+    // reset to `anon` so the route guard sends the user back to `/`.
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth:expired'));
+    }
+    throw new ApiError(res.status, body);
+  }
   return body as T;
 }
 
