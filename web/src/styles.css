@@ -134,7 +134,13 @@ button:disabled {
 }
 
 .filter-row {
+  display: flex;
+  align-items: center;
   margin: 0.5rem 0 1rem;
+}
+
+.filter-row .filter-count {
+  margin-left: auto;
 }
 
 .outcome-win {

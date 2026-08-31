@@ -31,7 +31,7 @@ export function EventsPage() {
 
   return (
     <div>
-      <h1>Events</h1>
+      <h1>Events{data && ` (${data.length})`}</h1>
       {loading && <p className="muted">Loading…</p>}
       {error && <p className="error">{error}</p>}
       {deleteError && <p className="error">{deleteError}</p>}

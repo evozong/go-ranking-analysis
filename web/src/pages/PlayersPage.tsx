@@ -96,7 +96,7 @@ export function PlayersPage() {
 
   return (
     <div>
-      <h1>Players</h1>
+      <h1>Players{data && ` (${data.length})`}</h1>
       {loading && <p className="muted">Loading…</p>}
       {error && <p className="error">{error}</p>}
       {hints.error && <p className="error">{hints.error}</p>}
@@ -117,7 +117,9 @@ export function PlayersPage() {
               />{' '}
               Only possible duplicates
             </label>
-            <span className="muted"> {rows.length} of {data.length}</span>
+            <span className="muted filter-count">
+              {rows.length} of {data.length}
+            </span>
           </div>
 
           {selected.size >= 2 && (
