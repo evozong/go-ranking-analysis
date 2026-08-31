@@ -56,3 +56,15 @@ CREATE INDEX IF NOT EXISTS idx_games_white ON games(white_event_player_id);
 CREATE INDEX IF NOT EXISTS idx_games_black ON games(black_event_player_id);
 CREATE INDEX IF NOT EXISTS idx_games_winner ON games(winner_event_player_id);
 CREATE INDEX IF NOT EXISTS idx_games_event ON games(event_id);
+
+-- Invite-only allowlist. The whole access-control mechanism: a Google-authenticated
+-- visitor gets the full app iff their (lowercased) email has a row here. The owner
+-- adds/removes invitees by editing rows directly (Neon console / psql). Seeded with
+-- the owner's own email so the first sign-in isn't locked out.
+CREATE TABLE IF NOT EXISTS allowed_emails (
+  email    TEXT PRIMARY KEY,   -- lowercased
+  added_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO allowed_emails (email) VALUES ('evozong@gmail.com')
+  ON CONFLICT (email) DO NOTHING;
