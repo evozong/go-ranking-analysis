@@ -78,12 +78,63 @@ test('the odd field forces a bye every fully-paired round; each `0+` becomes one
   assert.equal(byes.length, byeCount(table));
   assert.equal(byes.length, 4); // rounds 1,2,4,5 (round 3 has an even field)
 
-  // Rae Quinn (num 9) takes the round-5 bye.
-  const rae = byes.find((g) => g.whiteKey === 'RAEQUINN');
-  assert.ok(rae);
-  assert.equal(rae!.roundNumber, 5);
-  assert.equal(rae!.blackKey, null);
-  assert.equal(rae!.outcome.isGame, false);
+  // Sam True (num 10) takes the round-4 bye.
+  const sam = byes.find((g) => g.whiteKey === 'SAMTRUE');
+  assert.ok(sam);
+  assert.equal(sam!.roundNumber, 4);
+  assert.equal(sam!.blackKey, null);
+  assert.equal(sam!.outcome.isGame, false);
+});
+
+test('a female entrant ("Female" column true) gets a " (F)" name suffix, consistently', () => {
+  const { table, xml, parsed } = convert(sampleCsv);
+
+  // generator marks pairing numbers 1, 5, 6, 9, 12 as Female=true
+  const femaleNums = table.players
+    .filter((p) => p.female === true)
+    .map((p) => p.num)
+    .sort((a, b) => a - b);
+  assert.deepEqual(femaleNums, [1, 5, 6, 9, 12]);
+  assert.equal(table.players.filter((p) => p.female === false).length, 8);
+  assert.equal(table.players.filter((p) => p.female === null).length, 0);
+
+  // The generated XML is plain DTD-conformant OpenGotha: no non-standard attr,
+  // the suffix lives in the name only.
+  assert.ok(!/female=/i.test(xml));
+  const names: string[] = attrs
+    .parse(xml)
+    .Tournament.Players.Player.map((p: any) => p['@_name']);
+  assert.ok(names.includes('Anna Bell (F)')); // num 1, female
+  assert.ok(names.includes('Carl Dean')); // num 2, not female — no suffix
+
+  // parseOpenGotha sees the suffixed name as the real name, and the <Game> keys
+  // it references resolve (round-trip is internally consistent).
+  const anna = parsed.players.find((p) => p.displayName === 'Anna Bell (F)');
+  assert.ok(anna);
+  assert.equal(anna!.ogKey, 'ANNABELL(F)');
+  assert.ok(
+    parsed.games.some(
+      (g) => g.whiteKey === anna!.ogKey || g.blackKey === anna!.ogKey,
+    ),
+  );
+});
+
+test('no "Female" column, or value false, means no name suffix', () => {
+  const csv = [
+    'Num,Pl,Name,Rk,NbW,R1,NBW,SOS,SOSOS',
+    '1,,Alice,30K,0,2=,0,0,0',
+    '2,,Bob,30K,0,1=,0,0,0',
+  ].join('\n');
+  const { table, xml, parsed } = convert(csv);
+  assert.deepEqual(
+    table.players.map((p) => p.female),
+    [null, null],
+  );
+  assert.ok(!/\(F\)/.test(xml));
+  assert.deepEqual(
+    parsed.players.map((p) => p.displayName).sort(),
+    ['Alice', 'Bob'],
+  );
 });
 
 test('a `0-` round drops the game and clears the participating bit', () => {
@@ -121,12 +172,13 @@ test('comma-in-name rows parse as a single field and keep the comma in the key',
   const { table, parsed } = convert(sampleCsv);
   assert.ok(table.players.some((p) => p.name === 'Kwan Yat Hei, George'));
   assert.ok(table.players.some((p) => p.name === 'Tan Yu Xin, Benjamin'));
-  assert.ok(parsed.players.some((p) => p.ogKey === 'KWANYATHEI,GEORGE'));
+  // Kwan (num 6) is female -> " (F)" suffix; the comma still survives in the key.
+  assert.ok(parsed.players.some((p) => p.ogKey === 'KWANYATHEI,GEORGE(F)'));
   assert.ok(parsed.players.some((p) => p.ogKey === 'TANYUXIN,BENJAMIN'));
 });
 
 test('a `=` cell yields a draw game with no winner', () => {
-  // the fixture has exactly one jigo (Anna Bell vs Carl Dean, round 1)
+  // the fixture has exactly one jigo (Anna Bell (F) vs Carl Dean, round 1)
   const { parsed: fromFixture } = convert(sampleCsv);
   const draws = fromFixture.games.filter((g) => g.outcome.type === 'draw');
   assert.equal(draws.length, 1);
@@ -203,4 +255,13 @@ test('DB import of the converted sample records every player, game and bye', asy
   assert.equal(summary.nonGames, 4);
   assert.equal(summary.gamesInserted, gameCount(table) + byeCount(table));
   assert.equal(summary.gamesInserted, 34);
+
+  // the 5 female entrants are stored with the " (F)" name suffix
+  const suffixed = (
+    await db.query(
+      "SELECT COUNT(*)::int AS n FROM event_players WHERE event_id = $1 AND display_name LIKE '% (F)'",
+      [summary.eventId],
+    )
+  ).rows[0] as { n: number };
+  assert.equal(suffixed.n, 5);
 });

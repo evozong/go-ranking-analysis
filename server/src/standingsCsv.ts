@@ -29,6 +29,7 @@ export interface StandingsPlayer {
   num: number;
   name: string;
   rank: string;
+  female: boolean | null; // from the optional "Female" column; null = unknown
 }
 
 export interface StandingsTable {
@@ -104,13 +105,19 @@ function parseCsv(text: string): string[][] {
 // parseStandingsTable
 // ---------------------------------------------------------------------------
 
-const HEAD_PREFIX = ['Num', 'Pl', 'Name', 'Female', 'Rk', 'NbW'];
-const HEAD_SUFFIX = ['NBW', 'SOS', 'SOSOS'];
-
 // Short-format cell: leading opponent number + one result sign. A full-format
 // dump appends type/colour/handicap chars (`!`, `w`, `b`, `/`, a digit) which we
 // deliberately drop — a `!` forfeit is treated as a normal result (out of scope).
 const CELL_RE = /^(\d+)([+\-=])([!wb/\d]*)$/;
+
+// "true"/"false" (case-insensitive) -> boolean; anything else (incl. an empty
+// cell, or no "Female" column at all) -> null (unknown).
+function parseFemale(v: string | undefined): boolean | null {
+  const s = v?.trim().toLowerCase();
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  return null;
+}
 
 export function parseStandingsTable(csvText: string): StandingsTable {
   const rows = parseCsv(csvText).filter(
@@ -120,27 +127,38 @@ export function parseStandingsTable(csvText: string): StandingsTable {
     throw new StandingsParseError('CSV is empty');
   }
 
+  // Columns are located by name (not fixed position), so exports that add or
+  // drop label columns still parse. Required: Num (first column), Name, Rk, and
+  // a contiguous run of R1..Rn. "Female" is optional; everything else is ignored.
   const header = rows[0].map((h) => h.trim());
-  const prefixOk = HEAD_PREFIX.every((h, idx) => header[idx] === h);
-  const roundCols: string[] = [];
-  let k = HEAD_PREFIX.length;
-  while (k < header.length && /^R\d+$/.test(header[k])) {
-    roundCols.push(header[k]);
-    k++;
-  }
-  const suffixOk =
-    header.length - k === HEAD_SUFFIX.length &&
-    HEAD_SUFFIX.every((h, idx) => header[k + idx] === h);
-  if (!prefixOk || roundCols.length === 0 || !suffixOk) {
+  const colIdx = (name: string): number =>
+    header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+
+  const nameIdx = colIdx('Name');
+  const rankIdx = colIdx('Rk');
+  const femaleIdx = colIdx('Female');
+  const roundIdxs = header
+    .map((h, i) => (/^R\d+$/i.test(h) ? i : -1))
+    .filter((i) => i >= 0);
+  const roundsContiguous = roundIdxs.every(
+    (v, i) => i === 0 || v === roundIdxs[i - 1] + 1,
+  );
+
+  if (
+    colIdx('Num') !== 0 ||
+    nameIdx < 0 ||
+    rankIdx < 0 ||
+    roundIdxs.length === 0 ||
+    !roundsContiguous
+  ) {
     throw new StandingsParseError(
-      `Unexpected header row; expected "${HEAD_PREFIX.join(',')},R1..Rn,${HEAD_SUFFIX.join(',')}"`,
+      'Unexpected header row; need a "Num" first column plus "Name", "Rk" and a ' +
+        'contiguous run of "R1".."Rn" columns',
     );
   }
 
-  const rounds = roundCols.length;
-  const nameIdx = 2;
-  const rankIdx = 4;
-  const roundStart = HEAD_PREFIX.length;
+  const rounds = roundIdxs.length;
+  const roundStart = roundIdxs[0];
 
   const dataRows = rows.slice(1);
   const players: StandingsPlayer[] = [];
@@ -173,7 +191,12 @@ export function parseStandingsTable(csvText: string): StandingsTable {
     }
     seenKeys.set(key, ri);
 
-    players.push({ num, name, rank: r[rankIdx].trim() });
+    players.push({
+      num,
+      name,
+      rank: r[rankIdx].trim(),
+      female: femaleIdx >= 0 ? parseFemale(r[femaleIdx]) : null,
+    });
 
     const rowCells: Cell[] = [];
     for (let rd = 0; rd < rounds; rd++) {
@@ -251,6 +274,14 @@ export function buildOpenGothaXml(
   const { rounds, players, cells, warnings } = table;
   const beginDate = date ?? '';
 
+  // OpenGotha has no gender field and we want the generated file to stay
+  // DTD-conformant, so a female entrant (the optional CSV "Female" column set to
+  // "true") is recorded by suffixing " (F)" onto the player name. This suffix is
+  // part of the name everywhere — the <Player> attribute AND the key that
+  // <Game>/<ByePlayer> reference — so the file is internally consistent.
+  const displayNameOf = (p: StandingsPlayer): string =>
+    p.female === true ? `${p.name} (F)` : p.name;
+
   // --- <Player> rows: participating bit is 0 only for a `0-` (absent) round ---
   const playerXml = players.map((p, pi) => {
     const participating = cells[pi]
@@ -258,14 +289,15 @@ export function buildOpenGothaXml(
       .join('');
     const rk = xmlEscape(p.rank);
     return (
-      `    <Player name="${xmlEscape(p.name)}" firstName="" rank="${rk}" ` +
+      `    <Player name="${xmlEscape(displayNameOf(p))}" firstName="" rank="${rk}" ` +
       `grade="${rk}" country="" club="" rating="${rankToRating(p.rank)}" ` +
       `ratingOrigin="" smmsCorrection="0" participating="${participating}" ` +
       `registeringStatus="FIN"/>`
     );
   });
 
-  const keyOf = (num: number): string => playerKey(players[num - 1].name, '');
+  const keyOf = (num: number): string =>
+    playerKey(displayNameOf(players[num - 1]), '');
 
   // --- <Game> rows: emit each pairing once, from the lower pairing number ---
   const gameXml: string[] = [];

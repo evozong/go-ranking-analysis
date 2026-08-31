@@ -5,7 +5,8 @@ Deterministic Swiss-ish pairing so every Rx cell is internally consistent
 (each game appears in both players' rows with mirrored results). An ODD field
 (13 players) so every fully-paired round produces a genuine `0+` bye. Also
 covers: comma-in-name rows, a single-round absence (`0-` -> participating bit
-0), and one forced draw (`=`). No real tournament data.
+0), one forced draw (`=`), and a populated "Female" column. No real tournament
+data.
 
 Run: python3 standings-sample.gen.py > standings-sample.csv
 """
@@ -26,6 +27,7 @@ NAMES = [
     "Will Yorke",
 ]
 ROUNDS = 5
+FEMALE = {1, 5, 6, 9, 12}  # 1-based pairing numbers marked female="true"
 ABSENT = {13: {3}}  # player 13 sits out round 3 only
 DRAWS = {(1, 2, 1)}  # (lo_num, hi_num, round) forced jigo
 
@@ -74,7 +76,9 @@ lines = [",".join(q(h) for h in header)]
 for n in range(1, N + 1):
     wins = sum(1 for r in range(1, ROUNDS + 1) if cells[n][r].endswith("+"))
     row = [
-        str(n), str(n), NAMES[n - 1], "false", "30K", str(wins),
+        str(n), str(n), NAMES[n - 1],
+        "true" if n in FEMALE else "false",
+        "30K", str(wins),
         *[cells[n][r] for r in range(1, ROUNDS + 1)],
         str(wins), "0", "0",
     ]

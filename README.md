@@ -191,12 +191,16 @@ relative to `process.cwd()` when the bundled sibling path is gone.
 2. **Import** has two sections:
    - **Import from OpenGotha XML** — upload an OpenGotha `.xml`.
    - **Import from Standings CSV** — upload a parsed standings-table CSV
-     (`Num,Pl,Name,Female,Rk,NbW,R1..Rn,NBW,SOS,SOSOS`): it is converted to a
-     DTD-conformant OpenGotha `.xml` (downloaded automatically) and imported
-     through the same pipeline in one request. Name/date pre-fill from the
-     filename and stay editable. Short-format standings can't mark forfeits, so
-     every played result becomes a plain game; `0+` is a bye, `0-` a not-paired
-     round.
+     (`Num,…,Name,…,Rk,…,R1..Rn,…`): it is converted to a DTD-conformant OpenGotha
+     `.xml` (downloaded automatically) and imported through the same pipeline in
+     one request. Name/date pre-fill from the filename and stay editable. Columns
+     are found by name — `Num` (first column), `Name`, `Rk` and a contiguous
+     `R1..Rn` run are required; label columns may vary. An optional `Female`
+     column set to `true` suffixes that player's name with ` (F)` (OpenGotha has
+     no gender field and we keep the file DTD-conformant); the suffix is part of
+     the name everywhere it is used. Short-format standings can't mark forfeits,
+     so every played result becomes a plain game; `0+` is a bye, `0-` a
+     not-paired round.
 
    A duplicate is rejected with a 409: re-uploading the same OpenGotha file, or a
    standings CSV whose tournament name + date already exist (the generated `.xml`
