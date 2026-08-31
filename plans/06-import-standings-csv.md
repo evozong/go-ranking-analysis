@@ -8,7 +8,11 @@ bug surfaced that the tournament records this user actually has on hand are
 `20250419_go_academy_intermediate_r5_standings_table.csv`), not OpenGotha files.
 A hand-reconstructed `.xml` for one of them was non-conformant (invented
 `<ByePlayer><Bye result=.../></ByePlayer>` shape, spaced player keys) — proof that
-"reconstruct the XML by hand" is error-prone.
+"reconstruct the XML by hand" is error-prone. The user is discarding those
+hand-made files; **non-conformant `.xml` will not be supported**, and the
+exploratory parser tweak for that shape has been reverted —
+[server/src/openGotha.ts](server/src/openGotha.ts) is back at HEAD (it already
+parses conformant `<ByePlayers><ByePlayer/>` byes).
 
 Goal: add a **second import path** that takes a standings CSV, converts it to a
 **DTD-conformant OpenGotha `.xml`**, hands that file back to the user for
