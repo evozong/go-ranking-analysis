@@ -54,6 +54,10 @@ resource "aws_lambda_function" "api" {
       PGHOST_POOLED_PRD = var.pg_host_pooled_prd
       PGPASSWORD_PRD    = var.pg_password_prd
       PG_POOL_MAX       = "2"
+      # The app rejects any request without this header. CloudFront injects it on
+      # every origin request (see the lambda origin's custom_header); a direct
+      # hit to the *.lambda-url host lacks it and gets 403.
+      ORIGIN_SECRET = random_password.origin_secret.result
     }
   }
 
@@ -63,29 +67,38 @@ resource "aws_lambda_function" "api" {
   ]
 }
 
-# Private Function URL: only the CloudFront distribution can call it (SigV4 via
-# the lambda OAC + the permission below). Direct hits to the *.lambda-url host 403.
+# Shared secret CloudFront injects as a request header; the app requires it.
+resource "random_password" "origin_secret" {
+  length  = 40
+  special = false
+}
+
+# authorization_type = NONE, not AWS_IAM + OAC: CloudFront OAC only signs GET/HEAD
+# origin requests, so signed POST/PUT bodies fail the Function URL's SigV4 check
+# (the app's file upload would always 403). The Function URL is instead cloaked
+# by the ORIGIN_SECRET header check in the app.
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
-  authorization_type = "AWS_IAM"
+  authorization_type = "NONE"
 }
 
-resource "aws_lambda_permission" "cloudfront_invoke_url" {
-  statement_id           = "AllowCloudFrontInvokeFunctionUrl"
+# A public (NONE) Function URL still needs a resource policy granting access.
+# Since October 2025 that means BOTH lambda:InvokeFunctionUrl AND
+# lambda:InvokeFunction for principal "*" — without the second one every request
+# gets a Function-URL-authorization 403. Terraform/AWS do not add either
+# automatically. Actual access is still gated by the x-origin-secret check in the
+# app (a bare `aws lambda invoke` reaches the handler and gets 403 without it).
+resource "aws_lambda_permission" "public_function_url" {
+  statement_id           = "AllowPublicFunctionUrl"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.api.function_name
-  principal              = "cloudfront.amazonaws.com"
-  source_arn             = aws_cloudfront_distribution.web.arn
-  function_url_auth_type = "AWS_IAM"
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }
 
-# Since October 2025 AWS also requires plain lambda:InvokeFunction for the
-# CloudFront principal — Function URLs created after that date 403 without it
-# even when InvokeFunctionUrl is granted.
-resource "aws_lambda_permission" "cloudfront_invoke" {
-  statement_id  = "AllowCloudFrontInvokeFunction"
+resource "aws_lambda_permission" "public_function_invoke" {
+  statement_id  = "AllowPublicFunctionInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
-  principal     = "cloudfront.amazonaws.com"
-  source_arn    = aws_cloudfront_distribution.web.arn
+  principal     = "*"
 }

@@ -3,8 +3,10 @@
 Deploys the app to AWS for ~$0/month:
 
 - **API** — the Express app (`server/src/lambda.ts`) on **Lambda** + a **Function
-  URL** locked to CloudFront (`authorization_type = AWS_IAM` + a `lambda` OAC).
-  Not reachable directly.
+  URL** (`authorization_type = NONE`). CloudFront injects a secret `x-origin-secret`
+  header on every origin request and the app rejects anything without it, so a
+  direct hit to the `*.lambda-url` host gets 403. (OAC / `AWS_IAM` was the first
+  approach but CloudFront OAC only signs GET/HEAD, so POST uploads always 403'd.)
 - **SPA** — `web/dist` in a **private S3 bucket** behind the same **CloudFront**
   distribution. `/api/*` routes to the Lambda origin; everything else serves the
   SPA, with a CloudFront Function rewriting extension-less paths to `/index.html`
@@ -78,9 +80,9 @@ Prereqs: that profile logged in, `tofu` + `aws` + Node 22+ on PATH.
 |---|---|
 | `versions.tf` | providers, `aws` provider bound to `var.aws_profile` |
 | `variables.tf` | region/profile/name + the three `pg_*_prd` secrets |
-| `lambda.tf` | zip from `server/dist-lambda`, role, log group, function, Function URL, CloudFront invoke permission |
+| `lambda.tf` | zip from `server/dist-lambda`, role, log group, function, Function URL, `random_password` origin secret |
 | `s3.tf` | private bucket + OAC bucket policy |
-| `cloudfront.tf` | 2 OACs, SPA-rewrite function, distribution (S3 default + `/api/*` → Lambda) |
+| `cloudfront.tf` | S3 OAC, SPA-rewrite function, distribution (S3 default + `/api/*` → Lambda with the secret `custom_header`) |
 | `spa-rewrite.js` | CloudFront viewer-request: extension-less path → `/index.html` |
 | `upload.tf` | `web/dist` → S3 objects + `/*` invalidation |
 | `outputs.tf` | `app_url`, `distribution_id`, `function_url`, `bucket` |
@@ -97,5 +99,6 @@ not managed by this config; delete it in the Neon console.
 
 ## Not here (see plans/ security notes)
 
-CORS, public Function URL, WAF, request auth, reserved-concurrency caps, budget
-alarms — all deferred. The API is private behind CloudFront by design.
+CORS, WAF, per-route request auth, reserved-concurrency caps, budget alarms — all
+deferred. The Function URL is public but cloaked by the `x-origin-secret` header
+that only CloudFront knows.

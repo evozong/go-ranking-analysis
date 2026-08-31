@@ -12,40 +12,15 @@ data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled"
 }
 
-# Forward everything to the Lambda origin EXCEPT Host and Authorization. Both must
-# be omitted for CloudFront to sign the request with the Lambda OAC: Host has to
-# be the origin's own host (part of the SigV4 signature), and if the policy
-# forwards Authorization, CloudFront will not add its own OAC signature at all
-# (which is what caused the Function URL to return 403 AccessDenied).
-resource "aws_cloudfront_origin_request_policy" "api" {
-  name = "${var.name}-api"
-
-  headers_config {
-    header_behavior = "allExcept"
-    headers {
-      items = ["host", "authorization"]
-    }
-  }
-
-  query_strings_config {
-    query_string_behavior = "all"
-  }
-
-  cookies_config {
-    cookie_behavior = "none"
-  }
+# Forward everything to the Lambda origin except Host (the Function URL validates
+# its own Host header).
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
 }
 
 resource "aws_cloudfront_origin_access_control" "s3" {
   name                              = "${var.name}-s3"
   origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-resource "aws_cloudfront_origin_access_control" "lambda" {
-  name                              = "${var.name}-lambda"
-  origin_access_control_origin_type = "lambda"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
@@ -70,15 +45,21 @@ resource "aws_cloudfront_distribution" "web" {
   }
 
   origin {
-    origin_id                = "lambda"
-    domain_name              = local.function_url_host
-    origin_access_control_id = aws_cloudfront_origin_access_control.lambda.id
+    origin_id   = "lambda"
+    domain_name = local.function_url_host
 
     custom_origin_config {
       http_port              = 80
       https_port             = 443
       origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
+    # Cloaks the (authorization_type = NONE) Function URL: the app rejects any
+    # request without this header, and viewers cannot set or see it.
+    custom_header {
+      name  = "x-origin-secret"
+      value = random_password.origin_secret.result
     }
   }
 
@@ -97,7 +78,7 @@ resource "aws_cloudfront_distribution" "web" {
     }
   }
 
-  # API -> private Lambda Function URL. No caching, forward everything but Host.
+  # API -> Function URL. No caching, forward everything but Host.
   ordered_cache_behavior {
     path_pattern             = "/api/*"
     target_origin_id         = "lambda"
@@ -106,7 +87,7 @@ resource "aws_cloudfront_distribution" "web" {
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
     cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.api.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   restrictions {

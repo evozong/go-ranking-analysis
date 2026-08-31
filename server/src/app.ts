@@ -7,6 +7,19 @@ import { createRouter } from './routes.js';
 // they run the exact same middleware stack.
 export function createApp(): Express {
   const app = express();
+
+  // When ORIGIN_SECRET is set (the Lambda deploy), require the matching header
+  // that CloudFront injects on every origin request. This cloaks the public
+  // Function URL — a direct hit to the *.lambda-url host has no such header.
+  // Unset locally, so `npm run dev` is unaffected.
+  const originSecret = process.env.ORIGIN_SECRET;
+  if (originSecret) {
+    app.use((req, res, next) => {
+      if (req.get('x-origin-secret') === originSecret) return next();
+      res.status(403).json({ error: 'forbidden' });
+    });
+  }
+
   app.use(express.json());
   app.use('/api', createRouter(pool));
 

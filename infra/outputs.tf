@@ -8,7 +8,7 @@ output "distribution_id" {
 }
 
 output "function_url" {
-  description = "Private (AWS_IAM) — reachable only via CloudFront, not directly."
+  description = "Only useful via CloudFront — a direct hit lacks the x-origin-secret header and gets 403."
   value       = aws_lambda_function_url.api.function_url
 }
 
