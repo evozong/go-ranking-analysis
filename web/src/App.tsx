@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from './auth';
 import { ProfileMenu } from './components/ProfileMenu';
 
@@ -8,7 +8,9 @@ export function App() {
   return (
     <div className="app">
       <header className="topnav">
-        <span className="brand">Go Ranking Analysis</span>
+        <Link to="/" className="brand">
+          Go Ranking Analysis
+        </Link>
         {status === 'ok' && (
           <nav>
             <NavLink to="/events">Events</NavLink>

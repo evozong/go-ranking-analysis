@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth';
 
 export function LandingPage() {
@@ -34,8 +34,8 @@ export function LandingPage() {
       )}
 
       {status === 'ok' && (
-        <p>
-          <Link to="/events">Go to app →</Link>
+        <p className="muted">
+          You’re signed in — use the navigation above to get started.
         </p>
       )}
     </div>

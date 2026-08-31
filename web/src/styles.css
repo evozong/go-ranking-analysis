@@ -35,6 +35,11 @@ a:hover {
 
 .topnav .brand {
   font-weight: 700;
+  color: inherit;
+}
+
+.topnav .brand:hover {
+  text-decoration: none;
 }
 
 .topnav nav {
