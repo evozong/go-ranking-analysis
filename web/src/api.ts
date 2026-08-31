@@ -130,6 +130,20 @@ export const api = {
     fd.append('file', file);
     return req<ImportSummary>('/api/imports', { method: 'POST', body: fd });
   },
+  importStandings(
+    file: File,
+    name: string,
+    date: string,
+  ): Promise<ImportSummary & { xml: string; filename: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('name', name);
+    fd.append('date', date);
+    return req<ImportSummary & { xml: string; filename: string }>(
+      '/api/standings/import',
+      { method: 'POST', body: fd },
+    );
+  },
   players: () => req<PlayerListItem[]>('/api/players'),
   playerDuplicateHints: () =>
     req<DuplicateHint[]>('/api/players/duplicate-hints'),

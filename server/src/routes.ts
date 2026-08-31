@@ -7,6 +7,12 @@ import {
 } from './importTournament.js';
 import { NotOpenGothaError } from './openGotha.js';
 import {
+  buildOpenGothaXml,
+  downloadFilename,
+  parseStandingsTable,
+  StandingsParseError,
+} from './standingsCsv.js';
+import {
   findDuplicateHints,
   getEvent,
   getEventPlayers,
@@ -67,6 +73,57 @@ export function createRouter(db: Db): Router {
         }
         if (err instanceof NotOpenGothaError) {
           return res.status(422).json({ error: err.message });
+        }
+        throw err;
+      }
+    }),
+  );
+
+  // Second import path: a parsed standings-table CSV is converted to a
+  // DTD-conformant OpenGotha XML, that XML is imported through the *same*
+  // pipeline as POST /imports, and the generated XML is returned so the browser
+  // can offer it as a download. POST /imports is untouched.
+  r.post(
+    '/standings/import',
+    upload.single('file'),
+    asyncHandler(async (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Missing file (multipart field "file")' });
+      }
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) {
+        return res.status(400).json({ error: 'Tournament name is required' });
+      }
+      const date = String(req.body?.date ?? '').trim() || null;
+      try {
+        // importTournament still hashes the generated XML to reject exact
+        // re-runs (and the downloaded .xml round-tripped through POST /imports).
+        // But the tournament name is user-typed here, so a re-import with the
+        // name or date edited would slip past that hash and silently create a
+        // duplicate event. Guard on (name, date) up front.
+        const existing = (
+          await db.query(
+            'SELECT id FROM events WHERE lower(name) = lower($1) AND date IS NOT DISTINCT FROM $2',
+            [name, date],
+          )
+        ).rows[0] as { id: number } | undefined;
+        if (existing) throw new DuplicateImportError(existing.id);
+
+        const table = parseStandingsTable(req.file.buffer.toString('utf8'));
+        const xml = buildOpenGothaXml(table, { name, date });
+        const summary = await importTournament(db, Buffer.from(xml, 'utf8'));
+        return res
+          .status(201)
+          .json({ ...summary, xml, filename: downloadFilename(name, date) });
+      } catch (err) {
+        if (err instanceof StandingsParseError || err instanceof NotOpenGothaError) {
+          return res.status(422).json({ error: err.message });
+        }
+        if (err instanceof DuplicateImportError) {
+          return res.status(409).json({
+            error: 'This tournament file has already been imported',
+            eventId: err.eventId,
+          });
         }
         throw err;
       }

@@ -189,6 +189,14 @@ relative to `process.cwd()` when the bundled sibling path is gone.
 
 1. `npm run dev`, open http://localhost:5173.
 2. **Import** → upload an OpenGotha `.xml`. Re-uploading the same file is rejected (409).
+   Or switch to **Standings CSV** mode and upload a parsed standings-table CSV
+   (`Num,Pl,Name,Female,Rk,NbW,R1..Rn,NBW,SOS,SOSOS`): it is converted to a
+   DTD-conformant OpenGotha `.xml` (downloaded automatically) and imported through
+   the same pipeline in one request. Name/date pre-fill from the filename and stay
+   editable. Short-format standings can't mark forfeits, so every played result
+   becomes a plain game; `0+` is a bye, `0-` a not-paired round. Re-importing a
+   CSV whose tournament name + date already exist is rejected (409), as is
+   re-uploading the generated `.xml` through the OpenGotha path.
 3. **Events** / **Players** to browse; a player page shows reverse-chronological game
    history plus opponents split into losing / even / winning records.
 4. On an event page you can **remap** a mis-matched player to the correct canonical
@@ -199,6 +207,10 @@ relative to `process.cwd()` when the bundled sibling path is gone.
 
 ## Layout notes
 
+- `server/src/standingsCsv.ts` — standings-table CSV → DTD-conformant OpenGotha
+  XML string (`parseStandingsTable` + `buildOpenGothaXml`). Fed straight into the
+  existing importer; rank→rating is an approximate EGF-linear lookup our importer
+  never reads.
 - `server/src/openGotha.ts` — XML → tournament struct. The `<Game>` player-key rule
   (`playerKey()`) has a marked spot to adjust if a real file disagrees.
 - `server/src/result.ts` — OpenGotha `result` enum → normalized outcome; also a marked

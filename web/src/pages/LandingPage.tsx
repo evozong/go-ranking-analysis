@@ -10,8 +10,9 @@ export function LandingPage() {
     <div className="landing">
       <h1>Go Ranking Analysis</h1>
       <p className="muted">
-        Ingests OpenGotha tournament results and lets you explore the head-to-head
-        history of any player. Access is invite-only.
+        Ingests OpenGotha tournament results — or a parsed standings-table CSV —
+        and lets you explore the head-to-head history of any player. Access is
+        invite-only.
       </p>
 
       {authError && (
