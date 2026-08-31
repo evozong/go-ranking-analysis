@@ -42,6 +42,7 @@ selects which set is used; prod supplies `APP_ENV=prd` + `PGHOST_PRD` /
 | `npm run dev` | runs the API (`tsx watch`) and the Vite dev server together |
 | `npm run build` | type-checks + builds both workspaces |
 | `npm test` | runs the server test suite (`node:test` via `tsx`) |
+| `npm run deploy` | builds, bundles the Lambda, and `tofu apply`s the AWS stack (see [infra/](infra/README.md)) |
 
 The server scripts layer env files: `--env-file=.env.defaults` then
 `--env-file-if-exists=.env.local` (later file wins). No script injects `APP_ENV`
@@ -54,6 +55,18 @@ at `stg`. If Neon connection limits bite under parallel test files, add
 The API connects to Neon Postgres using discrete `PG*_<ENV>` fields (see Setup);
 there is no local database file. `schema.sql` is idempotent and auto-applied on
 startup, including the two seeded `Open` events.
+
+## Deployment
+
+`server/` runs on **AWS Lambda** (`server/src/lambda.ts`, an esbuild bundle of the
+same Express app) behind a **CloudFront** distribution that also serves the built
+`web/` SPA from a private **S3** bucket. `/api/*` routes to Lambda; everything else
+is the SPA. DB is a Neon `prd` branch. It fits inside the AWS always-free tiers
+(~$0/month).
+
+Lambda does **not** run `initSchema()` — apply the schema out-of-band with
+`npm run migrate -w server` (pointed at `prd`) before deploying and after any
+`schema.sql` change. Full runbook: [infra/README.md](infra/README.md).
 
 ## Using it
 
@@ -74,3 +87,6 @@ startup, including the two seeded `Open` events.
 - `server/src/result.ts` — OpenGotha `result` enum → normalized outcome; also a marked
   adjust spot.
 - `server/src/schema.sql` — schema + seed of the two always-present `Open` events.
+- `server/src/app.ts` — builds the Express app (no `listen`, no schema). Shared by
+  `server.ts` (local `listen`) and `lambda.ts` (AWS handler). `migrate.ts` is the
+  standalone schema apply.

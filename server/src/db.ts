@@ -47,7 +47,10 @@ export function connConfig({ direct = false }: { direct?: boolean } = {}): pg.Po
     password,
     database: process.env.PGDATABASE,
     ssl: { rejectUnauthorized: true }, // Neon: TLS + SCRAM channel binding handled by pg
-    max: 10,
+    // One pool per process. Lambda containers are single-concurrency, so prod
+    // sets PG_POOL_MAX=2 to avoid multiplying Neon connections under scale;
+    // local dev / self-hosted keeps the default 10.
+    max: Number(process.env.PG_POOL_MAX ?? 10),
   };
 }
 
@@ -67,10 +70,14 @@ export interface Queryable {
 // isolated-schema pool satisfy this.
 export type Db = pg.Pool;
 
-const schemaSql = readFileSync(join(here, 'schema.sql'), 'utf8');
+// Read lazily, not at module load: the Lambda bundle never calls initSchema()
+// (schema is applied out-of-band by migrate.ts) and must not need schema.sql
+// packaged next to it.
+let schemaSql: string | undefined;
 
 // Apply the (idempotent) schema. Safe to run on every startup.
 export async function initSchema(db: Queryable = pool): Promise<void> {
+  schemaSql ??= readFileSync(join(here, 'schema.sql'), 'utf8');
   await db.query(schemaSql);
 }
 

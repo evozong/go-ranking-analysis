@@ -1,6 +1,7 @@
 # Ignore
 node_modules/
 dist/
+dist-lambda/
 *.tsbuildinfo
 *.db
 *.db-shm

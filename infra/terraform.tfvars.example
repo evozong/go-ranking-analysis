@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (git-ignored) and fill in from the Neon console
+# (Project > Branches > prd > Connection details).
+
+pg_host_prd        = "ep-xxxx-xxxx-xxxxxxxx.us-west-2.aws.neon.tech"
+pg_host_pooled_prd = "ep-xxxx-xxxx-xxxxxxxx-pooler.us-west-2.aws.neon.tech"
+pg_password_prd    = ""
+
+# Optional overrides (defaults shown):
+# aws_region  = "us-west-2"   # keep in the same region as the Neon project
+# aws_profile = "admin"
+# name        = "go-ranking-analysis"

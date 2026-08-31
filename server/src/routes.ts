@@ -23,7 +23,10 @@ import {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  // 6 MiB matches the Lambda synchronous-invoke / Function URL request cap, so an
+  // oversized upload fails here with a clear 400 rather than at the platform edge.
+  // OpenGotha XML files are a few KB in practice.
+  limits: { fileSize: 6 * 1024 * 1024 },
 });
 
 function intParam(v: unknown): number | undefined {
