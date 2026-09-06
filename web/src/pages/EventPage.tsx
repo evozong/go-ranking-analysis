@@ -5,9 +5,12 @@ import { useAsync } from '../useAsync';
 import { MatchupTable } from '../components/MatchupTable';
 import { StandingsTable } from '../components/StandingsTable';
 
+type Tab = 'players' | 'standings' | 'matchups';
+
 export function EventPage() {
   const { id } = useParams();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [tab, setTab] = useState<Tab>('players');
 
   const event = useAsync(() => api.event(id!), [id]);
   const players = useAsync(() => api.eventPlayers(id!), [id, refreshKey]);
@@ -31,40 +34,79 @@ export function EventPage() {
         {event.data.playerCount} players
       </p>
 
-      <h2>Players</h2>
-      {players.error && <p className="error">{players.error}</p>}
-      {players.data && (
-        <table>
-          <thead>
-            <tr>
-              <th>Raw name</th>
-              <th>Rank</th>
-              <th>Club</th>
-              <th>Country</th>
-              <th>Matched player</th>
-              <th>Remap</th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.data.map((row) => (
-              <PlayerRow
-                key={row.eventPlayerId}
-                row={row}
-                options={allPlayers.data ?? []}
-                onRemapped={afterRemap}
-              />
-            ))}
-          </tbody>
-        </table>
+      <div className="tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={tab === 'players'}
+          className={tab === 'players' ? 'active' : undefined}
+          onClick={() => setTab('players')}
+        >
+          Players
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'standings'}
+          className={tab === 'standings' ? 'active' : undefined}
+          onClick={() => setTab('standings')}
+        >
+          Standings
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'matchups'}
+          className={tab === 'matchups' ? 'active' : undefined}
+          onClick={() => setTab('matchups')}
+        >
+          Matchups
+        </button>
+      </div>
+
+      {tab === 'players' && (
+        <>
+          <h2>Players</h2>
+          {players.error && <p className="error">{players.error}</p>}
+          {players.data && (
+            <table>
+              <thead>
+                <tr>
+                  <th>Raw name</th>
+                  <th>Rank</th>
+                  <th>Club</th>
+                  <th>Country</th>
+                  <th>Matched player</th>
+                  <th>Remap</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.data.map((row) => (
+                  <PlayerRow
+                    key={row.eventPlayerId}
+                    row={row}
+                    options={allPlayers.data ?? []}
+                    onRemapped={afterRemap}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
       )}
 
-      <h2>Standings</h2>
-      {standings.error && <p className="error">{standings.error}</p>}
-      {standings.data && <StandingsTable table={standings.data} />}
+      {tab === 'standings' && (
+        <>
+          <h2>Standings</h2>
+          {standings.error && <p className="error">{standings.error}</p>}
+          {standings.data && <StandingsTable table={standings.data} />}
+        </>
+      )}
 
-      <h2>Matchups</h2>
-      {matchups.error && <p className="error">{matchups.error}</p>}
-      {matchups.data && <MatchupTable rows={matchups.data} />}
+      {tab === 'matchups' && (
+        <>
+          <h2>Matchups</h2>
+          {matchups.error && <p className="error">{matchups.error}</p>}
+          {matchups.data && <MatchupTable rows={matchups.data} />}
+        </>
+      )}
     </div>
   );
 }

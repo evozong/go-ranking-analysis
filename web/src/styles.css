@@ -158,6 +158,32 @@ button:disabled {
   color: var(--muted);
 }
 
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin: 1.25rem 0 0;
+}
+
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.tabs button:hover {
+  color: inherit;
+}
+
+.tabs button.active {
+  color: inherit;
+  border-bottom-color: var(--link);
+}
+
 .remap {
   display: inline-flex;
   gap: 0.35rem;
