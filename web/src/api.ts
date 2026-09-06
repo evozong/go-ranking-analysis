@@ -86,6 +86,8 @@ export interface EventPlayerRow {
   eventPlayerId: number;
   rawName: string;
   rank: string | null;
+  club: string | null;
+  country: string | null;
   canonicalPlayerId: number | null;
   canonicalName: string | null;
 }

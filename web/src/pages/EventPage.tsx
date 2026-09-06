@@ -37,6 +37,8 @@ export function EventPage() {
             <tr>
               <th>Raw name</th>
               <th>Rank</th>
+              <th>Club</th>
+              <th>Country</th>
               <th>Matched player</th>
               <th>Remap</th>
             </tr>
@@ -103,6 +105,8 @@ function PlayerRow({
     <tr>
       <td>{row.rawName}</td>
       <td>{row.rank ?? '—'}</td>
+      <td>{row.club ?? '—'}</td>
+      <td>{row.country ?? '—'}</td>
       <td>
         {row.canonicalPlayerId != null ? (
           <Link to={`/players/${row.canonicalPlayerId}`}>{row.canonicalName}</Link>

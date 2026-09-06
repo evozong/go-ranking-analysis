@@ -262,6 +262,8 @@ export interface EventPlayerRow {
   eventPlayerId: number;
   rawName: string;
   rank: string | null;
+  club: string | null;
+  country: string | null;
   canonicalPlayerId: number | null;
   canonicalName: string | null;
 }
@@ -273,6 +275,7 @@ export async function getEventPlayers(
   return (
     await db.query(
       `SELECT ep.id AS "eventPlayerId", ep.display_name AS "rawName", ep.rank AS rank,
+         ep.club AS club, ep.country AS country,
          ep.player_id AS "canonicalPlayerId", p.display_name AS "canonicalName"
        FROM event_players ep
        LEFT JOIN players p ON p.id = ep.player_id
