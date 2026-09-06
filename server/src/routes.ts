@@ -21,6 +21,7 @@ import {
   getMatchups,
   getPlayerDetail,
   getPlayerHistory,
+  getStandings,
   listEvents,
   listPlayers,
   mergePlayers,
@@ -228,6 +229,15 @@ export function createRouter(db: Db): Router {
       const id = intParam(req.params.id);
       if (id === undefined) return res.status(400).json({ error: 'bad id' });
       return res.json(await getEventPlayers(db, id));
+    }),
+  );
+
+  r.get(
+    '/events/:id/standings',
+    asyncHandler(async (req, res) => {
+      const id = intParam(req.params.id);
+      if (id === undefined) return res.status(400).json({ error: 'bad id' });
+      return res.json(await getStandings(db, id));
     }),
   );
 

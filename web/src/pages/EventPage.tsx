@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, type EventPlayerRow } from '../api';
 import { useAsync } from '../useAsync';
 import { MatchupTable } from '../components/MatchupTable';
+import { StandingsTable } from '../components/StandingsTable';
 
 export function EventPage() {
   const { id } = useParams();
@@ -10,6 +11,7 @@ export function EventPage() {
 
   const event = useAsync(() => api.event(id!), [id]);
   const players = useAsync(() => api.eventPlayers(id!), [id, refreshKey]);
+  const standings = useAsync(() => api.standings(id!), [id, refreshKey]);
   const matchups = useAsync(() => api.matchups({ event: id! }), [id, refreshKey]);
   const allPlayers = useAsync(() => api.players(), [refreshKey]);
 
@@ -55,6 +57,10 @@ export function EventPage() {
           </tbody>
         </table>
       )}
+
+      <h2>Standings</h2>
+      {standings.error && <p className="error">{standings.error}</p>}
+      {standings.data && <StandingsTable table={standings.data} />}
 
       <h2>Matchups</h2>
       {matchups.error && <p className="error">{matchups.error}</p>}

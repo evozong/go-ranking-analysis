@@ -1,6 +1,21 @@
 import type { Db, Queryable } from './db.js';
 import { withTransaction } from './db.js';
 import { normalizeName, resolveCanonicalPlayer } from './players.js';
+import {
+  computeStandings,
+  type StandingsGameInput,
+  type StandingsPlayerInput,
+  type StandingsTable,
+} from './standings.js';
+
+export type {
+  StandingsCell,
+  StandingsGameInput,
+  StandingsPlayerInput,
+  StandingsRow,
+  StandingsTable,
+} from './standings.js';
+export { computeStandings } from './standings.js';
 
 export const HISTORY_PAGE_SIZE = 30;
 
@@ -338,6 +353,35 @@ export async function getMatchups(
       params,
     )
   ).rows as MatchupRow[];
+}
+
+export async function getStandings(
+  db: Queryable,
+  eventId: number,
+): Promise<StandingsTable> {
+  const players = (
+    await db.query(
+      `SELECT ep.id AS "eventPlayerId", ep.player_id AS "playerId",
+         p.display_name AS name, ep.rank AS rank
+       FROM event_players ep
+       JOIN players p ON p.id = ep.player_id
+       WHERE ep.event_id = $1`,
+      [eventId],
+    )
+  ).rows as StandingsPlayerInput[];
+
+  const games = (
+    await db.query(
+      `SELECT round_number AS "roundNumber", white_event_player_id AS "whiteId",
+         black_event_player_id AS "blackId", winner_event_player_id AS "winnerId",
+         result_type AS "resultType"
+       FROM games
+       WHERE event_id = $1`,
+      [eventId],
+    )
+  ).rows as StandingsGameInput[];
+
+  return computeStandings(players, games);
 }
 
 export class RemapError extends Error {}

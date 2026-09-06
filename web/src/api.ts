@@ -103,6 +103,28 @@ export interface MatchupRow {
   resultType: string;
 }
 
+export interface StandingsCell {
+  opponentName: string | null;
+  label: string;
+  points: number;
+}
+
+export interface StandingsRow {
+  eventPlayerId: number;
+  playerId: number;
+  name: string;
+  rank: string | null;
+  score: number;
+  sos: number;
+  sosos: number;
+  rounds: (StandingsCell | null)[];
+}
+
+export interface StandingsTable {
+  rounds: number;
+  rows: StandingsRow[];
+}
+
 export class ApiError extends Error {
   status: number;
   body: any;
@@ -171,6 +193,8 @@ export const api = {
   event: (id: number | string) => req<EventListItem>(`/api/events/${id}`),
   eventPlayers: (id: number | string) =>
     req<EventPlayerRow[]>(`/api/events/${id}/players`),
+  standings: (id: number | string) =>
+    req<StandingsTable>(`/api/events/${id}/standings`),
   matchups: (params: { player?: number | string; event?: number | string }) => {
     const q = new URLSearchParams();
     if (params.player != null) q.set('player', String(params.player));
