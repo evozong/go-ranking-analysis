@@ -6,12 +6,12 @@ import { MatchupTable } from '../components/MatchupTable';
 import { StandingsTable } from '../components/StandingsTable';
 import { RankMovementChart } from '../components/RankMovementChart';
 
-type Tab = 'players' | 'standings' | 'movement' | 'matchups';
+type Tab = 'standings' | 'movement' | 'matchups' | 'players';
 
 export function EventPage() {
   const { id } = useParams();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [tab, setTab] = useState<Tab>('players');
+  const [tab, setTab] = useState<Tab>('standings');
 
   const event = useAsync(() => api.event(id!), [id]);
   const players = useAsync(() => api.eventPlayers(id!), [id, refreshKey]);
@@ -39,14 +39,6 @@ export function EventPage() {
       <div className="tabs" role="tablist">
         <button
           role="tab"
-          aria-selected={tab === 'players'}
-          className={tab === 'players' ? 'active' : undefined}
-          onClick={() => setTab('players')}
-        >
-          Players
-        </button>
-        <button
-          role="tab"
           aria-selected={tab === 'standings'}
           className={tab === 'standings' ? 'active' : undefined}
           onClick={() => setTab('standings')}
@@ -69,7 +61,39 @@ export function EventPage() {
         >
           Matchups
         </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'players'}
+          className={tab === 'players' ? 'active' : undefined}
+          onClick={() => setTab('players')}
+        >
+          Players
+        </button>
       </div>
+
+      {tab === 'standings' && (
+        <>
+          <h2>Standings</h2>
+          {standings.error && <p className="error">{standings.error}</p>}
+          {standings.data && <StandingsTable table={standings.data} />}
+        </>
+      )}
+
+      {tab === 'movement' && (
+        <>
+          <h2>Standing movement</h2>
+          {rankMovements.error && <p className="error">{rankMovements.error}</p>}
+          {rankMovements.data && <RankMovementChart data={rankMovements.data} />}
+        </>
+      )}
+
+      {tab === 'matchups' && (
+        <>
+          <h2>Matchups</h2>
+          {matchups.error && <p className="error">{matchups.error}</p>}
+          {matchups.data && <MatchupTable rows={matchups.data} />}
+        </>
+      )}
 
       {tab === 'players' && (
         <>
@@ -99,30 +123,6 @@ export function EventPage() {
               </tbody>
             </table>
           )}
-        </>
-      )}
-
-      {tab === 'standings' && (
-        <>
-          <h2>Standings</h2>
-          {standings.error && <p className="error">{standings.error}</p>}
-          {standings.data && <StandingsTable table={standings.data} />}
-        </>
-      )}
-
-      {tab === 'movement' && (
-        <>
-          <h2>Standing movement</h2>
-          {rankMovements.error && <p className="error">{rankMovements.error}</p>}
-          {rankMovements.data && <RankMovementChart data={rankMovements.data} />}
-        </>
-      )}
-
-      {tab === 'matchups' && (
-        <>
-          <h2>Matchups</h2>
-          {matchups.error && <p className="error">{matchups.error}</p>}
-          {matchups.data && <MatchupTable rows={matchups.data} />}
         </>
       )}
     </div>
