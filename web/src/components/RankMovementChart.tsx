@@ -34,7 +34,9 @@ export function RankMovementChart({ data }: { data: RankMovements }) {
   const svgW = M.left + PLOT_W + M.right;
   const height = M.top + plotH + M.bottom;
   const colX = (r: number): number =>
-    rounds === 1 ? M.left + PLOT_W / 2 : M.left + (PLOT_W * r) / (rounds - 1);
+    rounds === 1
+      ? M.left + PLOT_W / 2
+      : M.left + (PLOT_W * (r - 1)) / (rounds - 1);
   const posY = (p: number): number => M.top + (p - 1) * ROW_H;
 
   const yTicks: number[] = [];
