@@ -4,8 +4,9 @@ import { api, type EventPlayerRow } from '../api';
 import { useAsync } from '../useAsync';
 import { MatchupTable } from '../components/MatchupTable';
 import { StandingsTable } from '../components/StandingsTable';
+import { RankMovementChart } from '../components/RankMovementChart';
 
-type Tab = 'players' | 'standings' | 'matchups';
+type Tab = 'players' | 'standings' | 'movement' | 'matchups';
 
 export function EventPage() {
   const { id } = useParams();
@@ -15,6 +16,7 @@ export function EventPage() {
   const event = useAsync(() => api.event(id!), [id]);
   const players = useAsync(() => api.eventPlayers(id!), [id, refreshKey]);
   const standings = useAsync(() => api.standings(id!), [id, refreshKey]);
+  const rankMovements = useAsync(() => api.rankMovements(id!), [id, refreshKey]);
   const matchups = useAsync(() => api.matchups({ event: id! }), [id, refreshKey]);
   const allPlayers = useAsync(() => api.players(), [refreshKey]);
 
@@ -50,6 +52,14 @@ export function EventPage() {
           onClick={() => setTab('standings')}
         >
           Standings
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'movement'}
+          className={tab === 'movement' ? 'active' : undefined}
+          onClick={() => setTab('movement')}
+        >
+          Movement
         </button>
         <button
           role="tab"
@@ -97,6 +107,14 @@ export function EventPage() {
           <h2>Standings</h2>
           {standings.error && <p className="error">{standings.error}</p>}
           {standings.data && <StandingsTable table={standings.data} />}
+        </>
+      )}
+
+      {tab === 'movement' && (
+        <>
+          <h2>Standing movement</h2>
+          {rankMovements.error && <p className="error">{rankMovements.error}</p>}
+          {rankMovements.data && <RankMovementChart data={rankMovements.data} />}
         </>
       )}
 

@@ -125,6 +125,20 @@ export interface StandingsTable {
   rows: StandingsRow[];
 }
 
+export interface RankMovementSeries {
+  eventPlayerId: number;
+  playerId: number;
+  name: string;
+  rank: string | null;
+  finalPosition: number;
+  positions: number[]; // index 0 = after round 1; length === rounds
+}
+
+export interface RankMovements {
+  rounds: number;
+  series: RankMovementSeries[]; // ordered by finalPosition, ascending
+}
+
 export class ApiError extends Error {
   status: number;
   body: any;
@@ -195,6 +209,8 @@ export const api = {
     req<EventPlayerRow[]>(`/api/events/${id}/players`),
   standings: (id: number | string) =>
     req<StandingsTable>(`/api/events/${id}/standings`),
+  rankMovements: (id: number | string) =>
+    req<RankMovements>(`/api/events/${id}/rank-movements`),
   matchups: (params: { player?: number | string; event?: number | string }) => {
     const q = new URLSearchParams();
     if (params.player != null) q.set('player', String(params.player));

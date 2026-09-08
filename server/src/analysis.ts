@@ -7,6 +7,7 @@ import {
   type StandingsPlayerInput,
   type StandingsTable,
 } from './standings.js';
+import { computeRankMovements, type RankMovements } from './rankMovements.js';
 
 export type {
   StandingsCell,
@@ -16,6 +17,8 @@ export type {
   StandingsTable,
 } from './standings.js';
 export { computeStandings } from './standings.js';
+export type { RankMovements, RankMovementSeries } from './rankMovements.js';
+export { computeRankMovements } from './rankMovements.js';
 
 export const HISTORY_PAGE_SIZE = 30;
 
@@ -355,10 +358,10 @@ export async function getMatchups(
   ).rows as MatchupRow[];
 }
 
-export async function getStandings(
+async function loadStandingsInputs(
   db: Queryable,
   eventId: number,
-): Promise<StandingsTable> {
+): Promise<{ players: StandingsPlayerInput[]; games: StandingsGameInput[] }> {
   const players = (
     await db.query(
       `SELECT ep.id AS "eventPlayerId", ep.player_id AS "playerId",
@@ -381,7 +384,23 @@ export async function getStandings(
     )
   ).rows as StandingsGameInput[];
 
+  return { players, games };
+}
+
+export async function getStandings(
+  db: Queryable,
+  eventId: number,
+): Promise<StandingsTable> {
+  const { players, games } = await loadStandingsInputs(db, eventId);
   return computeStandings(players, games);
+}
+
+export async function getRankMovements(
+  db: Queryable,
+  eventId: number,
+): Promise<RankMovements> {
+  const { players, games } = await loadStandingsInputs(db, eventId);
+  return computeRankMovements(players, games);
 }
 
 export class RemapError extends Error {}
