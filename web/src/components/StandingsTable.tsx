@@ -40,7 +40,15 @@ export function StandingsTable({ table }: { table: StandingsTableData }) {
             {row.rounds.map((cell, ri) =>
               cell ? (
                 <td key={ri} className={outcomeClass(cell.points)} title={cell.label}>
-                  {cell.opponentName ?? cell.label}
+                  {cell.opponentName == null ? (
+                    cell.label
+                  ) : cell.opponentPlayerId != null ? (
+                    <Link to={`/players/${cell.opponentPlayerId}`}>
+                      {cell.opponentName}
+                    </Link>
+                  ) : (
+                    cell.opponentName
+                  )}
                 </td>
               ) : (
                 <td key={ri} className="muted">

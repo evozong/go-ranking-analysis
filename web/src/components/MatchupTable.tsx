@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { MatchupRow } from '../api';
 
 function resultLabel(r: MatchupRow): string {
@@ -30,6 +31,17 @@ function resultLabel(r: MatchupRow): string {
   }
 }
 
+function playerCell(
+  name: string | null,
+  playerId: number | null,
+  isWinner: boolean,
+) {
+  if (name == null) return <>—</>;
+  const inner =
+    playerId != null ? <Link to={`/players/${playerId}`}>{name}</Link> : name;
+  return isWinner ? <strong>{inner}</strong> : inner;
+}
+
 export function MatchupTable({ rows }: { rows: MatchupRow[] }) {
   if (rows.length === 0) return <p className="muted">No matchups.</p>;
   return (
@@ -37,8 +49,8 @@ export function MatchupTable({ rows }: { rows: MatchupRow[] }) {
       <thead>
         <tr>
           <th>Rd</th>
-          <th>White</th>
           <th>Black</th>
+          <th>White</th>
           <th>Result</th>
         </tr>
       </thead>
@@ -47,17 +59,17 @@ export function MatchupTable({ rows }: { rows: MatchupRow[] }) {
           <tr key={i}>
             <td>{r.roundNumber ?? '—'}</td>
             <td>
-              {r.winnerName != null && r.whiteName === r.winnerName ? (
-                <strong>{r.whiteName}</strong>
-              ) : (
-                (r.whiteName ?? '—')
+              {playerCell(
+                r.blackName,
+                r.blackPlayerId,
+                r.winnerName != null && r.blackName === r.winnerName,
               )}
             </td>
             <td>
-              {r.winnerName != null && r.blackName === r.winnerName ? (
-                <strong>{r.blackName}</strong>
-              ) : (
-                (r.blackName ?? '—')
+              {playerCell(
+                r.whiteName,
+                r.whitePlayerId,
+                r.winnerName != null && r.whiteName === r.winnerName,
               )}
             </td>
             <td className="muted">{resultLabel(r)}</td>

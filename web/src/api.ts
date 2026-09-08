@@ -98,13 +98,16 @@ export interface MatchupRow {
   date: string | null;
   roundNumber: number | null;
   whiteName: string | null;
+  whitePlayerId: number | null;
   blackName: string | null;
+  blackPlayerId: number | null;
   winnerName: string | null;
   resultType: string;
 }
 
 export interface StandingsCell {
   opponentName: string | null;
+  opponentPlayerId: number | null;
   label: string;
   points: number;
 }

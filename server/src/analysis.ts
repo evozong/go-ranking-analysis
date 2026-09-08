@@ -310,7 +310,9 @@ export interface MatchupRow {
   date: string | null;
   roundNumber: number | null;
   whiteName: string | null;
+  whitePlayerId: number | null;
   blackName: string | null;
+  blackPlayerId: number | null;
   winnerName: string | null;
   resultType: string;
 }
@@ -340,7 +342,9 @@ export async function getMatchups(
          g.event_id AS "eventId", e.name AS "eventName", e.date AS date,
          g.round_number AS "roundNumber",
          wp.display_name AS "whiteName",
+         wep.player_id AS "whitePlayerId",
          bp.display_name AS "blackName",
+         bep.player_id AS "blackPlayerId",
          winp.display_name AS "winnerName",
          g.result_type AS "resultType"
        FROM games g

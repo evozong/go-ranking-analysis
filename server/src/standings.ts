@@ -6,6 +6,7 @@
 
 export interface StandingsCell {
   opponentName: string | null; // null for a bye
+  opponentPlayerId: number | null; // canonical player id of the opponent; null for a bye
   label: string; // "Win" | "Loss" | "Draw" | "Bye" | "Forfeit win" | "Forfeit loss" | "Both win" | "Both lose" | "No result"
   points: number; // 0, 0.5, or 1
 }
@@ -65,6 +66,7 @@ export function computeStandings(
   games: StandingsGameInput[],
 ): StandingsTable {
   const nameOf = new Map(players.map((p) => [p.eventPlayerId, p.name]));
+  const playerIdOf = new Map(players.map((p) => [p.eventPlayerId, p.playerId]));
   const rounds = games.reduce((m, g) => Math.max(m, g.roundNumber ?? 0), 0);
 
   const score = new Map<number, number>(players.map((p) => [p.eventPlayerId, 0]));
@@ -81,7 +83,12 @@ export function computeStandings(
   for (const g of games) {
     if (g.blackId == null) {
       addScore(g.whiteId, 1);
-      setCell(g.roundNumber, g.whiteId, { opponentName: null, label: 'Bye', points: 1 });
+      setCell(g.roundNumber, g.whiteId, {
+        opponentName: null,
+        opponentPlayerId: null,
+        label: 'Bye',
+        points: 1,
+      });
       continue;
     }
 
@@ -109,11 +116,13 @@ export function computeStandings(
 
     setCell(g.roundNumber, g.whiteId, {
       opponentName: nameOf.get(g.blackId) ?? null,
+      opponentPlayerId: playerIdOf.get(g.blackId) ?? null,
       label: cellLabel(g.resultType, whitePts),
       points: whitePts,
     });
     setCell(g.roundNumber, g.blackId, {
       opponentName: nameOf.get(g.whiteId) ?? null,
+      opponentPlayerId: playerIdOf.get(g.whiteId) ?? null,
       label: cellLabel(g.resultType, blackPts),
       points: blackPts,
     });

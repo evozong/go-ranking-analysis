@@ -53,17 +53,39 @@ test('computeStandings scores wins/draws/byes/forfeits and ranks by score then S
   );
 
   // Round-by-round cells: win/loss/draw/forfeit/bye labels and opponent names.
-  assert.deepEqual(byName.A.rounds[0], { opponentName: 'B', label: 'Win', points: 1 });
-  assert.deepEqual(byName.B.rounds[0], { opponentName: 'A', label: 'Loss', points: 0 });
-  assert.deepEqual(byName.E.rounds[0], { opponentName: null, label: 'Bye', points: 1 });
-  assert.deepEqual(byName.A.rounds[1], { opponentName: 'C', label: 'Draw', points: 0.5 });
+  assert.deepEqual(byName.A.rounds[0], {
+    opponentName: 'B',
+    opponentPlayerId: 2,
+    label: 'Win',
+    points: 1,
+  });
+  assert.deepEqual(byName.B.rounds[0], {
+    opponentName: 'A',
+    opponentPlayerId: 1,
+    label: 'Loss',
+    points: 0,
+  });
+  assert.deepEqual(byName.E.rounds[0], {
+    opponentName: null,
+    opponentPlayerId: null,
+    label: 'Bye',
+    points: 1,
+  });
+  assert.deepEqual(byName.A.rounds[1], {
+    opponentName: 'C',
+    opponentPlayerId: 3,
+    label: 'Draw',
+    points: 0.5,
+  });
   assert.deepEqual(byName.B.rounds[1], {
     opponentName: 'D',
+    opponentPlayerId: 4,
     label: 'Forfeit win',
     points: 1,
   });
   assert.deepEqual(byName.D.rounds[1], {
     opponentName: 'B',
+    opponentPlayerId: 2,
     label: 'Forfeit loss',
     points: 0,
   });
@@ -87,14 +109,21 @@ test('computeStandings handles both_win, both_lose, and no_result', () => {
 
   assert.equal(byName.P.score, 1);
   assert.equal(byName.Q.score, 1);
-  assert.deepEqual(byName.P.rounds[0], { opponentName: 'Q', label: 'Both win', points: 1 });
+  assert.deepEqual(byName.P.rounds[0], {
+    opponentName: 'Q',
+    opponentPlayerId: 2,
+    label: 'Both win',
+    points: 1,
+  });
   assert.deepEqual(byName.P.rounds[1], {
     opponentName: 'Q',
+    opponentPlayerId: 2,
     label: 'Both lose',
     points: 0,
   });
   assert.deepEqual(byName.P.rounds[2], {
     opponentName: 'Q',
+    opponentPlayerId: 2,
     label: 'No result',
     points: 0,
   });
