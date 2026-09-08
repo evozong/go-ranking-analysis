@@ -43,7 +43,10 @@ export function StandingsTable({ table }: { table: StandingsTableData }) {
                   {cell.opponentName == null ? (
                     cell.label
                   ) : cell.opponentPlayerId != null ? (
-                    <Link to={`/players/${cell.opponentPlayerId}`}>
+                    <Link
+                      to={`/players/${cell.opponentPlayerId}`}
+                      style={{ color: 'inherit' }}
+                    >
                       {cell.opponentName}
                     </Link>
                   ) : (
